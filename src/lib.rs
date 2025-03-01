@@ -6,6 +6,7 @@ use bevy::{
 
 mod actors;
 mod asset_tracking;
+mod map;
 mod states;
 mod theme;
 
@@ -13,7 +14,12 @@ pub struct SuperRogueSoccerPlugin;
 
 impl Plugin for SuperRogueSoccerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((asset_tracking::plugin, actors::plugin, states::plugin));
+        app.add_plugins((
+            asset_tracking::plugin,
+            actors::plugin,
+            states::plugin,
+            map::plugin,
+        ));
         app.load_resource::<GlyphAsset>();
         app.add_systems(Startup, startup);
     }
