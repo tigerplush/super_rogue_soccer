@@ -15,7 +15,11 @@ pub struct SuperRogueSoccerPlugin;
 
 impl Plugin for SuperRogueSoccerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
+        app.configure_sets(
+            Update,
+            (AppSet::TickTimers, AppSet::RecordInput, AppSet::Update).chain(),
+        )
+        .add_plugins((
             asset_tracking::plugin,
             actors::plugin,
             states::plugin,
@@ -110,4 +114,14 @@ impl FromWorld for FontAsset {
             font: assets.load(FontAsset::PATH),
         }
     }
+}
+
+#[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
+enum AppSet {
+    /// Tick timers.
+    TickTimers,
+    /// Record player input.
+    RecordInput,
+    /// Do everything else (consider splitting this into further variants).
+    Update,
 }
