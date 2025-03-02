@@ -11,8 +11,7 @@ use crate::{
 };
 
 use super::{
-    CurrentPlayer, PointerObject, is_dirty,
-    pathfinding::{self, CalculatedPath},
+    is_dirty, pathfinding::{self, CalculatedPath}, CurrentPlayer, PointerObject, Stats
 };
 
 pub fn plugin(app: &mut App) {
@@ -162,36 +161,34 @@ fn copy_action_state(
 
 fn report_abilities_used(
     query: Query<&ActionState<PlayerAbilities>>,
-    player: Option<Single<(Entity, &Transform), With<CurrentPlayer>>>,
+    player: Option<Single<(Entity, &Transform, &Stats), With<CurrentPlayer>>>,
     target: Option<Single<&Transform, With<PointerObject>>>,
     mut commands: Commands,
 ) {
     if player.is_none() || target.is_none() {
         return;
     }
-    let (player_entity, player_transform) = player.unwrap().into_inner();
+    let (player_entity, player_transform, stats) = player.unwrap().into_inner();
     let target_transform = target.unwrap().into_inner();
     for ability_state in &query {
         for ability in ability_state.get_just_pressed() {
             match ability {
                 PlayerAbilities::Walk => {
-                    // find current team member
-                    // calculate path
                     let path_result = pathfinding::calculate_path(
                         player_transform.translation,
                         target_transform.translation,
                     );
                     match path_result {
                         Ok(path) => {
+                            let len = (path.len() - 1).min(stats.ap);
                             commands
                                 .entity(player_entity)
-                                .insert(CalculatedPath::new(path, 0.5));
+                                .insert(CalculatedPath::new(path[0..=len].to_vec(), 0.5));
                         }
                         Err(_) => {
                             info!("no path available");
                         }
                     }
-                    // move until AP are consumed
                 }
                 PlayerAbilities::Kick => {
                     // find current team member

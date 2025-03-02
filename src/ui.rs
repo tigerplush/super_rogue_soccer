@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     FontAsset, PostUpdateSet,
-    actors::{actions::CurrentActions, PointerObject, is_dirty},
+    actors::{PointerObject, actions::CurrentActions, is_dirty},
     entities::{Interactable, Map},
     states::{AppState, gameplay::InfoContainer},
     to_ivec2,

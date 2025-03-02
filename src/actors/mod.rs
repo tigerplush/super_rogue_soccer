@@ -1,28 +1,24 @@
-use bevy::{color::palettes::css::YELLOW, prelude::*};
-use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
-
-use crate::{
-    AppSet, GlyphAsset, PostUpdateSet,
-    entities::{Interactable, Map},
-    states::AppState,
+use bevy::{
+    color::palettes::css::{GREEN, RED, YELLOW},
+    prelude::*,
 };
+use leafwing_input_manager::prelude::*;
+use pathfinding::calculate_path;
+
+use crate::{AppSet, GlyphAsset, entities::Interactable, to_world};
 
 pub mod actions;
 mod pathfinding;
 
 pub fn plugin(app: &mut App) {
-    app.insert_resource(PointerIsDirty(true))
+    app.register_type::<Stats>().insert_resource(PointerIsDirty(true))
         .add_plugins(InputManagerPlugin::<PointerActions>::default())
         .add_plugins((pathfinding::plugin, actions::plugin))
         .add_systems(
             Update,
             (
                 tick_pointer.in_set(AppSet::TickTimers),
-                (
-                    update_pointer,
-                    preview_path.after(update_pointer),
-                )
-                    .in_set(AppSet::Update),
+                (update_pointer, preview_path.after(update_pointer)).in_set(AppSet::Update),
             ),
         )
         .add_systems(Last, remove_dirty.run_if(is_dirty));
@@ -89,6 +85,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             },
             Transform::from_xyz(position.1 * 8.0, position.2 * 8.0, 1.0),
             Interactable::Person,
+            Stats { ap: 8 },
         ));
         if index == 0 {
             player.insert(CurrentPlayer);
@@ -138,22 +135,50 @@ fn tick_pointer(time: Res<Time>, mut query: Query<&mut PointerObject>) {
     }
 }
 
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+struct PreviewPath {
+    path: Vec<IVec2>,
+}
+
 fn update_pointer(
     mut dirt: ResMut<PointerIsDirty>,
-    mut query: Query<(&ActionState<PointerActions>, &mut Transform, &PointerObject)>,
+    mut query: Query<
+        (&ActionState<PointerActions>, &mut Transform, &PointerObject),
+        Without<CurrentPlayer>,
+    >,
+    current_players: Query<&Transform, With<CurrentPlayer>>,
+    mut commands: Commands,
 ) {
     for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
             transform.translation += Vec3::new(input.x * 8.0, input.y * 8.0, 0.0);
+            if let Ok(start_transform) = current_players.get_single() {
+                if let Ok(path) = calculate_path(start_transform.translation, transform.translation)
+                {
+                    commands.insert_resource(PreviewPath { path });
+                }
+            }
             dirt.0 = true;
         }
     }
 }
 
-fn preview_path() {}
+fn preview_path(path: Option<Res<PreviewPath>>, current_player: Option<Single<&Stats, With<CurrentPlayer>>>, mut gizmos: Gizmos) {
+    if path.is_none() || current_player.is_none(){
+        return;
+    }
+    let path = path.unwrap();
+    let stats = current_player.unwrap().into_inner();
+    for (index, window) in path.path.windows(2).enumerate() {
+        let color = if index < stats.ap { GREEN } else { RED };
+        gizmos.arrow_2d(to_world(window[0]), to_world(window[1]), color);
+    }
+}
 
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 struct Stats {
-    wit: f32,
-    dodge: f32,
+    ap: usize,
 }
