@@ -3,13 +3,14 @@ use bevy::{prelude::*, ui::widget::NodeImageMode};
 use crate::{PanelBorderAsset, actors, map, theme::prelude::*};
 
 use super::AppState;
+use crate::actors::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(AppState::Gameplay),
         (
             actors::startup,
-            actors::setup_slotmap,
+            actions::setup_slotmap,
             map::spawn_field,
             startup,
         ),
