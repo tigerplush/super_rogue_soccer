@@ -7,7 +7,12 @@ use super::AppState;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(AppState::Gameplay),
-        (actors::startup, map::spawn_field, startup),
+        (
+            actors::startup,
+            actors::setup_slotmap,
+            map::spawn_field,
+            startup,
+        ),
     );
 }
 

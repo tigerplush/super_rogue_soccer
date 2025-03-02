@@ -10,6 +10,7 @@ mod entities;
 mod map;
 mod states;
 mod theme;
+mod ui;
 
 pub struct SuperRogueSoccerPlugin;
 
@@ -25,6 +26,7 @@ impl Plugin for SuperRogueSoccerPlugin {
             states::plugin,
             map::plugin,
             entities::plugin,
+            ui::plugin,
         ));
         app.load_resource::<GlyphAsset>();
         app.load_resource::<PanelBorderAsset>();
@@ -125,4 +127,18 @@ enum AppSet {
     RecordInput,
     /// Do everything else (consider splitting this into further variants).
     Update,
+}
+
+fn to_ivec2(from: Vec3) -> IVec2 {
+    IVec2 {
+        x: (from.x / 8.0).floor() as i32,
+        y: (from.y / 8.0).floor() as i32,
+    }
+}
+
+fn to_world(from: IVec2) -> Vec2 {
+    Vec2 {
+        x: from.x as f32 * 8.0,
+        y: from.y as f32 * 8.0,
+    }
 }

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
+use crate::to_ivec2;
+
 pub fn plugin(app: &mut App) {
     app.register_type::<Map>()
         .insert_resource(Map::default())
@@ -9,7 +11,10 @@ pub fn plugin(app: &mut App) {
 }
 
 #[derive(Component)]
-pub struct Interactable;
+pub enum Interactable {
+    Ball,
+    Person,
+}
 
 #[derive(Resource, Default, Deref, DerefMut, Reflect)]
 #[reflect(Resource)]
@@ -20,9 +25,7 @@ pub struct Map {
 fn update_map(mut map: ResMut<Map>, query: Query<(&Transform, Entity), With<Interactable>>) {
     map.clear();
     for (transform, entity) in &query {
-        let x = (transform.translation.x / 8.0).floor() as i32;
-        let y = (transform.translation.y / 8.0).floor() as i32;
-        let position = IVec2::new(x, y);
+        let position = to_ivec2(transform.translation);
         map.entry(position)
             .and_modify(|vec| vec.push(entity))
             .or_insert(vec![entity]);
