@@ -1,7 +1,7 @@
 use bevy::{color::palettes::css::YELLOW, prelude::*};
 use leafwing_input_manager::prelude::*;
 
-use crate::GlyphAsset;
+use crate::{GlyphAsset, entities::Interactable};
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(InputManagerPlugin::<PointerActions>::default());
@@ -25,6 +25,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             ..default()
         },
         Transform::from_xyz(0.0, 0.0, 2.0),
+        Interactable,
     ));
 
     let positions = [
@@ -53,6 +54,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 ..default()
             },
             Transform::from_xyz(position.1 * 8.0, position.2 * 8.0, 1.0),
+            Interactable,
         ));
     }
 
