@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::to_ivec2;
+use crate::{PostUpdateSet, to_ivec2};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Map>()
         .insert_resource(Map::default())
-        .add_systems(PreUpdate, update_map);
+        .add_systems(PreUpdate, update_map)
+        .add_systems(PostUpdate, update_map.in_set(PostUpdateSet::Calculate));
 }
 
 #[derive(Component)]

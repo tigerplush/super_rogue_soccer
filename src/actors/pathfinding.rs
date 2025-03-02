@@ -5,6 +5,8 @@ use priority_queue::PriorityQueue;
 
 use crate::{AppSet, to_ivec2, to_world};
 
+use super::PointerIsDirty;
+
 pub fn plugin(app: &mut App) {
     app.add_systems(
         Update,
@@ -108,6 +110,7 @@ fn tick_path(time: Res<Time>, mut query: Query<&mut CalculatedPath>) {
 }
 
 fn follow_path(
+    mut dirt: ResMut<PointerIsDirty>,
     mut query: Query<(&mut Transform, &mut CalculatedPath, Entity)>,
     mut commands: Commands,
 ) {
@@ -121,5 +124,6 @@ fn follow_path(
         } else {
             commands.entity(entity).remove::<CalculatedPath>();
         }
+        dirt.0 = true;
     }
 }

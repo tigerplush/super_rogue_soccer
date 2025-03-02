@@ -1,15 +1,20 @@
 use bevy::prelude::*;
 
 use crate::{
-    FontAsset,
-    actors::{CurrentActions, PointerObject},
+    FontAsset, PostUpdateSet,
+    actors::{CurrentActions, PointerObject, is_dirty},
     entities::{Interactable, Map},
     states::{AppState, gameplay::InfoContainer},
     to_ivec2,
 };
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(FixedLast, update_ui.run_if(in_state(AppState::Gameplay)));
+    app.add_systems(
+        PostUpdate,
+        update_ui
+            .in_set(PostUpdateSet::Ui)
+            .run_if(in_state(AppState::Gameplay).and(is_dirty)),
+    );
 }
 
 fn update_ui(

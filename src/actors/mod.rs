@@ -5,7 +5,7 @@ use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
 use pathfinding::CalculatedPath;
 
 use crate::{
-    AppSet, GlyphAsset,
+    AppSet, GlyphAsset, PostUpdateSet,
     entities::{Interactable, Map},
     states::AppState,
     to_ivec2,
@@ -16,6 +16,7 @@ mod pathfinding;
 pub fn plugin(app: &mut App) {
     app.register_type::<CurrentActions>()
         .insert_resource(CurrentActions { actions: vec![] })
+        .insert_resource(PointerIsDirty(true))
         .add_plugins(InputManagerPlugin::<PointerActions>::default())
         .add_plugins(InputManagerPlugin::<Slots>::default())
         .add_plugins(InputManagerPlugin::<PlayerAbilities>::default())
@@ -32,9 +33,12 @@ pub fn plugin(app: &mut App) {
             ),
         )
         .add_systems(
-            FixedPostUpdate,
-            calculate_current_actions.run_if(in_state(AppState::Gameplay)),
-        );
+            PostUpdate,
+            calculate_current_actions
+                .in_set(PostUpdateSet::Move)
+                .run_if(in_state(AppState::Gameplay).and(is_dirty)),
+        )
+        .add_systems(Last, remove_dirty.run_if(is_dirty));
 }
 
 #[derive(Component)]
@@ -44,6 +48,17 @@ pub struct PointerObject {
 
 #[derive(Component)]
 struct CurrentPlayer;
+
+#[derive(Resource)]
+pub struct PointerIsDirty(bool);
+
+fn remove_dirty(mut dirt: ResMut<PointerIsDirty>) {
+    dirt.0 = false;
+}
+
+pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
+    dirt.0
+}
 
 pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     commands.spawn((
@@ -121,6 +136,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 Transform::from_xyz(0.0, 8.0, 0.0),
             ));
         });
+    info!("done spawning");
 }
 
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug)]
@@ -136,12 +152,14 @@ fn tick_pointer(time: Res<Time>, mut query: Query<&mut PointerObject>) {
 }
 
 fn update_pointer(
+    mut dirt: ResMut<PointerIsDirty>,
     mut query: Query<(&ActionState<PointerActions>, &mut Transform, &PointerObject)>,
 ) {
     for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
             transform.translation += Vec3::new(input.x * 8.0, input.y * 8.0, 0.0);
+            dirt.0 = true;
         }
     }
 }
@@ -302,7 +320,6 @@ fn report_abilities_used(
                     );
                     match path_result {
                         Ok(path) => {
-                            info!("path available: {:?}", path);
                             commands
                                 .entity(player_entity)
                                 .insert(CalculatedPath::new(path, 0.5));

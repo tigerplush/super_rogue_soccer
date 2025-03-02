@@ -20,6 +20,15 @@ impl Plugin for SuperRogueSoccerPlugin {
             Update,
             (AppSet::TickTimers, AppSet::RecordInput, AppSet::Update).chain(),
         )
+        .configure_sets(
+            PostUpdate,
+            (
+                PostUpdateSet::Calculate,
+                PostUpdateSet::Move,
+                PostUpdateSet::Ui,
+            )
+                .chain(),
+        )
         .add_plugins((
             asset_tracking::plugin,
             actors::plugin,
@@ -127,6 +136,13 @@ enum AppSet {
     RecordInput,
     /// Do everything else (consider splitting this into further variants).
     Update,
+}
+
+#[derive(SystemSet, Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
+enum PostUpdateSet {
+    Calculate,
+    Move,
+    Ui,
 }
 
 fn to_ivec2(from: Vec3) -> IVec2 {

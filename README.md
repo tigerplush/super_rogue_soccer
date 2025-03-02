@@ -11,6 +11,13 @@
 7. red cards kill players
 8. players have abilities
 
+## ToDo
+- Pathfinding should take world into consideration
+- Disable walk if it's too far away
+- Show walking distance? => add stats
+- Preview path
+- only update when pointer moves
+
 # Research
 https://www.bundesliga.com/de/faq/fussball-allgemein/torwart-abwehr-mittelfeld-angriff-welche-positionen-gibt-es-im-fussball-22370
 https://www.bundesliga.com/de/faq/fussball-allgemein/fussball-aufstellung-erklaerung-und-bezeichnungen-22361
