@@ -1,11 +1,23 @@
 use bevy::{color::palettes::css::YELLOW, prelude::*};
 use leafwing_input_manager::prelude::*;
 
-use crate::{GlyphAsset, entities::Interactable};
+use crate::{
+    AppSet, FontAsset, GlyphAsset,
+    entities::{Interactable, Map},
+    states::{AppState, gameplay::InfoContainer},
+};
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins(InputManagerPlugin::<PointerActions>::default());
-    app.add_systems(Update, update_pointer);
+    app
+        .add_plugins(InputManagerPlugin::<PointerActions>::default())
+        .add_systems(
+            Update,
+            (
+                tick_pointer.in_set(AppSet::TickTimers),
+                update_pointer.in_set(AppSet::Update),
+            ),
+        )
+        .add_systems(FixedPostUpdate, update_ui.run_if(in_state(AppState::Gameplay)));
 }
 
 #[derive(Component)]
@@ -94,15 +106,57 @@ enum PointerActions {
     Move,
 }
 
-fn update_pointer(
-    time: Res<Time>,
-    mut query: Query<(&ActionState<PointerActions>, &mut Transform, &mut Pointer)>,
-) {
-    for (action_state, mut transform, mut pointer) in &mut query {
+fn tick_pointer(time: Res<Time>, mut query: Query<&mut Pointer>) {
+    for mut pointer in &mut query {
         pointer.timer.tick(time.delta());
+    }
+}
+
+fn update_pointer(
+    mut query: Query<(&ActionState<PointerActions>, &mut Transform, &Pointer)>,
+) {
+    for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
             transform.translation += Vec3::new(input.x * 8.0, input.y * 8.0, 0.0);
         }
     }
+}
+
+fn to_ivec2(from: Vec3) -> IVec2 {
+    IVec2 {
+        x: (from.x / 8.0).floor() as i32,
+        y: (from.y / 8.0).floor() as i32,
+    }
+}
+
+fn update_ui(
+    font_asset: Res<FontAsset>,
+    map: Res<Map>,
+    ui_elements: Single<Entity, With<InfoContainer>>,
+    pointer: Single<&Transform, With<Pointer>>,
+    interactables: Query<(&Name, &Interactable)>,
+    mut commands: Commands,
+) {
+    let entity = ui_elements.into_inner();
+    let pointer = pointer.into_inner();
+    commands
+        .entity(entity)
+        .despawn_descendants()
+        .with_children(|info| {
+            let position = to_ivec2(pointer.translation);
+            let Some(vec) = map.get(&position) else {
+                return;
+            };
+            for &entity in vec {
+                let (name, _) = interactables.get(entity).unwrap();
+                info.spawn((
+                    Text::from(name.as_str()),
+                    TextFont {
+                        font: font_asset.clone_weak(),
+                        ..default()
+                    },
+                ));
+            }
+        });
 }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-mod gameplay;
+pub mod gameplay;
 mod loading;
 mod splash;
 

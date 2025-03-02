@@ -28,6 +28,7 @@ impl Plugin for SuperRogueSoccerPlugin {
         ));
         app.load_resource::<GlyphAsset>();
         app.load_resource::<PanelBorderAsset>();
+        app.load_resource::<FontAsset>();
         app.add_systems(Startup, startup);
     }
 }
