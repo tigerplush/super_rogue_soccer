@@ -13,10 +13,7 @@
 
 ## ToDo
 - Pathfinding should take world into consideration
-- Disable walk if it's too far away
-- Show walking distance? => add stats
-- Preview path
-- only update when pointer moves
+- bug in preview (show from current player or don't show at all)
 
 # Research
 https://www.bundesliga.com/de/faq/fussball-allgemein/torwart-abwehr-mittelfeld-angriff-welche-positionen-gibt-es-im-fussball-22370

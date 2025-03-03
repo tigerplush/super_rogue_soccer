@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 
-use crate::GlyphAsset;
+use crate::{GlyphAsset, entities::Interactable};
 
 mod field;
 
@@ -24,12 +24,20 @@ pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
     let tilemap_entity = commands.spawn(Name::from("Tilemap")).id();
     let mut tile_storage = TileStorage::empty(map_size);
 
+    let mut vec = vec![];
     for x in 0..map_size.x {
         for y in 0..map_size.y {
             let line = field::FIELD.lines().nth(y as usize).unwrap();
             let char = line.chars().nth(x as usize).unwrap();
             let index = match char {
-                '#' => TileTextureIndex(FULL),
+                '#' => {
+                    vec.push((
+                        Vec3::new(x as f32 * 8.0, y as f32 * 8.0, 0.0),
+                        Interactable::Wall,
+                        Name::from(format!("Wall {x},{y}")),
+                    ));
+                    TileTextureIndex(FULL)
+                }
                 '.' => TileTextureIndex(MARKINGS),
                 _ => TileTextureIndex(EMPTY),
             };
@@ -51,6 +59,20 @@ pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
     let grid_size = tile_size.into();
     let map_type = TilemapType::default();
 
+    let center = get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0);
+
+    commands
+        .spawn((Name::from("Walls"), Transform::default()))
+        .with_children(|parent| {
+            for (translation, interactable, name) in vec {
+                parent.spawn((
+                    name,
+                    interactable,
+                    Transform::from_translation(center.translation + translation),
+                ));
+            }
+        });
+
     commands.entity(tilemap_entity).insert(TilemapBundle {
         grid_size,
         map_type,
@@ -58,7 +80,7 @@ pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
         storage: tile_storage,
         texture: TilemapTexture::Single(glyph.glyph.clone_weak()),
         tile_size,
-        transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
+        transform: center,
         ..default()
     });
 }

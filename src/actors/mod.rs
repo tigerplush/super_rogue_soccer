@@ -1,3 +1,4 @@
+use actions::ActionQueue;
 use bevy::{
     color::palettes::css::{GREEN, RED, YELLOW},
     prelude::*,
@@ -11,7 +12,9 @@ pub mod actions;
 mod pathfinding;
 
 pub fn plugin(app: &mut App) {
-    app.register_type::<Stats>().insert_resource(PointerIsDirty(true))
+    app.register_type::<Stats>()
+        .register_type::<Velocity>()
+        .insert_resource(PointerIsDirty(true))
         .add_plugins(InputManagerPlugin::<PointerActions>::default())
         .add_plugins((pathfinding::plugin, actions::plugin))
         .add_systems(
@@ -85,7 +88,12 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             },
             Transform::from_xyz(position.1 * 8.0, position.2 * 8.0, 1.0),
             Interactable::Person,
-            Stats { ap: 8 },
+            Stats {
+                ap: 8,
+                kick_strength: 15.0,
+            },
+            ActionQueue::default(),
+            Velocity(Vec2::ZERO),
         ));
         if index == 0 {
             player.insert(CurrentPlayer);
@@ -95,7 +103,8 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     let input_map = InputMap::default()
         .with_dual_axis(PointerActions::Move, VirtualDPad::numpad())
         .with_dual_axis(PointerActions::Move, VirtualDPad::wasd())
-        .with_dual_axis(PointerActions::Move, VirtualDPad::arrow_keys());
+        .with_dual_axis(PointerActions::Move, VirtualDPad::arrow_keys())
+        .with(PointerActions::NextTurn, KeyCode::Space);
     commands
         .spawn((
             Name::from("Pointer"),
@@ -127,6 +136,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
 enum PointerActions {
     #[actionlike(DualAxis)]
     Move,
+    NextTurn,
 }
 
 fn tick_pointer(time: Res<Time>, mut query: Query<&mut PointerObject>) {
@@ -165,14 +175,28 @@ fn update_pointer(
     }
 }
 
-fn preview_path(path: Option<Res<PreviewPath>>, current_player: Option<Single<&Stats, With<CurrentPlayer>>>, mut gizmos: Gizmos) {
-    if path.is_none() || current_player.is_none(){
+fn preview_path(
+    path: Option<Res<PreviewPath>>,
+    current_player: Option<Single<(&Stats, &Transform), With<CurrentPlayer>>>,
+    mut gizmos: Gizmos,
+) {
+    if path.is_none() || current_player.is_none() {
         return;
     }
     let path = path.unwrap();
-    let stats = current_player.unwrap().into_inner();
+    let (stats, transform) = current_player.unwrap().into_inner();
+
+    if path.path.len() > 0 {
+        gizmos.arrow_2d(
+            transform.translation.truncate(),
+            to_world(path.path[0]),
+            GREEN,
+        );
+    }
+
     for (index, window) in path.path.windows(2).enumerate() {
-        let color = if index < stats.ap { GREEN } else { RED };
+        // we have to subtract 1 from the index here, because path doesn't start with 0
+        let color = if index < stats.ap - 1 { GREEN } else { RED };
         gizmos.arrow_2d(to_world(window[0]), to_world(window[1]), color);
     }
 }
@@ -181,4 +205,9 @@ fn preview_path(path: Option<Res<PreviewPath>>, current_player: Option<Single<&S
 #[reflect(Component)]
 struct Stats {
     ap: usize,
+    kick_strength: f32,
 }
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct Velocity(Vec2);

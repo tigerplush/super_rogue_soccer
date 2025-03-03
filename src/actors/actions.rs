@@ -11,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    is_dirty, pathfinding::{self, CalculatedPath}, CurrentPlayer, PointerObject, Stats
+    CurrentPlayer, PointerObject, PreviewPath, Stats, Velocity, is_dirty,
+    pathfinding::{self, CalculatedPath},
 };
 
 pub fn plugin(app: &mut App) {
@@ -23,7 +24,15 @@ pub fn plugin(app: &mut App) {
             PreUpdate,
             copy_action_state.after(InputManagerSystem::ManualControl),
         )
-        .add_systems(Update, report_abilities_used.in_set(AppSet::Update))
+        .add_systems(
+            Update,
+            (
+                report_abilities_used,
+                process_actions,
+                process_kick,
+            )
+                .in_set(AppSet::Update),
+        )
         .add_systems(
             PostUpdate,
             calculate_current_actions
@@ -35,57 +44,46 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 pub struct CurrentActions {
-    pub actions: Vec<(String, String, PlayerAbilities)>,
+    pub actions: Vec<(String, String, bool)>,
 }
 
 fn calculate_current_actions(
     map: Res<Map>,
+    path: Res<PreviewPath>,
     pointer: Single<&Transform, With<PointerObject>>,
     interactables: Query<&Interactable>,
     ability_slot: Single<&mut AbilitySlotMap>,
+    stats: Single<&Stats, With<CurrentPlayer>>,
     mut commands: Commands,
 ) {
-    let transform = pointer.into_inner();
-    let position = to_ivec2(transform.translation);
-    let mut actions = vec![];
     let mut slot_map = ability_slot.into_inner();
     slot_map.clear();
-    match map.get(&position) {
-        Some(entities) => {
-            for &entity in entities {
-                match interactables.get(entity).unwrap() {
-                    &Interactable::Ball => {
-                        actions.push(("f".to_string(), "walk".to_string(), PlayerAbilities::Walk));
-                        slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
-                        actions.push((
-                            "g".to_string(),
-                            "take control".to_string(),
-                            PlayerAbilities::Walk,
-                        ));
-                        slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl);
-                        actions.push(("h".to_string(), "kick".to_string(), PlayerAbilities::Kick));
-                        slot_map.insert(Slots::Ability3, PlayerAbilities::Kick);
-                    }
-                    &Interactable::Person => {
-                        actions.push(("f".to_string(), "walk".to_string(), PlayerAbilities::Walk));
-                        slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
-                        actions.push((
-                            "g".to_string(),
-                            "take control".to_string(),
-                            PlayerAbilities::Walk,
-                        ));
-                        slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl);
-                        actions.push(("h".to_string(), "kick".to_string(), PlayerAbilities::Kick));
-                        slot_map.insert(Slots::Ability3, PlayerAbilities::Kick);
-                        actions.push(("i".to_string(), "foul".to_string(), PlayerAbilities::Foul));
-                        slot_map.insert(Slots::Ability3, PlayerAbilities::Foul);
-                    }
-                }
+
+    let transform = pointer.into_inner();
+    let target_position = to_ivec2(transform.translation);
+    let mut actions = vec![];
+    let in_range = path.path.len() <= stats.ap;
+
+    actions.push(("f".to_string(), "walk".to_string(), in_range));
+    if in_range {
+        slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
+    }
+
+    if let Some(entities) = map.get(&target_position) {
+        for &entity in entities {
+            actions.push(("g".to_string(), "take control".to_string(), in_range));
+            actions.push(("h".to_string(), "kick".to_string(), in_range));
+            if in_range {
+                slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl);
+                slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
             }
-        }
-        None => {
-            actions.push(("f".to_string(), "walk".to_string(), PlayerAbilities::Walk));
-            slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
+            match interactables.get(entity).unwrap() {
+                &Interactable::Person => {
+                    actions.push(("i".to_string(), "foul".to_string(), in_range));
+                    slot_map.insert(Slots::Ability3, PlayerAbilities::Foul);
+                }
+                _ => (),
+            }
         }
     }
     commands.insert_resource(CurrentActions { actions });
@@ -95,7 +93,7 @@ fn calculate_current_actions(
 pub enum PlayerAbilities {
     Walk,
     TakeControl,
-    Kick,
+    Kick(Entity),
     Foul,
 }
 
@@ -159,38 +157,35 @@ fn copy_action_state(
     }
 }
 
+#[derive(Component, Default)]
+pub struct ActionQueue(Vec<Action>);
+
+enum Action {
+    MoveTo(Vec3),
+    Kick(Entity),
+    TakeControl(Entity),
+    Foul(Entity),
+}
+
 fn report_abilities_used(
     query: Query<&ActionState<PlayerAbilities>>,
-    player: Option<Single<(Entity, &Transform, &Stats), With<CurrentPlayer>>>,
+    player: Option<Single<&mut ActionQueue, With<CurrentPlayer>>>,
     target: Option<Single<&Transform, With<PointerObject>>>,
-    mut commands: Commands,
 ) {
     if player.is_none() || target.is_none() {
         return;
     }
-    let (player_entity, player_transform, stats) = player.unwrap().into_inner();
+    let mut queue = player.unwrap().into_inner();
     let target_transform = target.unwrap().into_inner();
     for ability_state in &query {
         for ability in ability_state.get_just_pressed() {
             match ability {
                 PlayerAbilities::Walk => {
-                    let path_result = pathfinding::calculate_path(
-                        player_transform.translation,
-                        target_transform.translation,
-                    );
-                    match path_result {
-                        Ok(path) => {
-                            let len = (path.len() - 1).min(stats.ap);
-                            commands
-                                .entity(player_entity)
-                                .insert(CalculatedPath::new(path[0..=len].to_vec(), 0.5));
-                        }
-                        Err(_) => {
-                            info!("no path available");
-                        }
-                    }
+                    queue.0.push(Action::MoveTo(target_transform.translation));
                 }
-                PlayerAbilities::Kick => {
+                PlayerAbilities::Kick(target) => {
+                    queue.0.push(Action::Kick(target));
+                    queue.0.push(Action::MoveTo(target_transform.translation));
                     // find current team member
                     // check if in range
                     // if in range, move there and add velocity to target
@@ -204,6 +199,8 @@ fn report_abilities_used(
                     // Also, you could use one player really good at kicking to maneuver team members over the field
                 }
                 PlayerAbilities::TakeControl => {
+                    // queue.0.push(Action::TakeControl(target_entity));
+                    queue.0.push(Action::MoveTo(target_transform.translation));
                     // find current team member
                     // check if in range
                     // if in range, move there and try to take control
@@ -214,6 +211,8 @@ fn report_abilities_used(
                     // enemies get a chance to free themselves every round
                 }
                 PlayerAbilities::Foul => {
+                    // queue.0.push(Action::Foul(target_entity));
+                    queue.0.push(Action::MoveTo(target_transform.translation));
                     // find current team member
                     // check if in range
                     // if in range, move there
@@ -225,4 +224,114 @@ fn report_abilities_used(
             }
         }
     }
+}
+
+fn process_actions(
+    mut query: Query<(
+        Entity,
+        &Transform,
+        &mut ActionQueue,
+        &Stats,
+        &Velocity,
+        Option<&CalculatedPath>,
+    )>,
+    mut commands: Commands,
+) {
+    for (entity, transform, mut queue, stats, velocity, path_option) in &mut query {
+        if path_option.is_some() {
+            continue;
+        }
+
+        if let Some(action) = queue.0.pop() {
+            match action {
+                Action::MoveTo(target) => {
+                    let Ok(path) = pathfinding::calculate_path(transform.translation, target)
+                    else {
+                        continue;
+                    };
+                    commands
+                        .entity(entity)
+                        .insert((Velocity(Vec2::ZERO), CalculatedPath::new(path, 0.5)));
+                }
+                Action::Kick(target) => {
+                    commands
+                        .entity(target)
+                        .insert(Kicked(velocity.0 * stats.kick_strength));
+                }
+                Action::TakeControl(target) => {}
+                _ => {
+                    info!("performing action");
+                }
+            }
+        }
+    }
+}
+
+fn process_kick(
+    time: Res<Time>,
+    map: Res<Map>,
+    mut query: Query<(&mut Transform, &mut Kicked, Entity)>,
+    interactables: Query<&Interactable>,
+    mut commands: Commands,
+) {
+    const EPSILON: f32 = 0.1;
+    for (mut transform, mut kicked, entity) in &mut query {
+        let mut position = transform.translation;
+        let total_movement = kicked.0 * time.delta_secs();
+        let steps = total_movement.length().ceil() as i32;
+        let step_size = total_movement.extend(0.0) / steps as f32;
+
+        let mut exit = false;
+        for _ in 0..steps {
+            let next_translation = position + step_size;
+            let next_position = to_ivec2(next_translation);
+            if let Some(entities) = map.get(&next_position) {
+                for entity in entities {
+                    match interactables.get(*entity).unwrap() {
+                        Interactable::Wall => {
+                            info!("hit a wall");
+                            let normal = get_wall_normal(next_position, &map);
+                            kicked.0 = reflect_velocity(kicked.0, normal);
+                            exit = true;
+                        }
+                        _ => ()
+                    }
+                }
+            }
+            if exit {
+                break;
+            }
+            position = next_translation;
+        }
+        transform.translation = position;
+        kicked.0 *= 0.9;
+        if kicked.0.length() < EPSILON {
+            commands.entity(entity).remove::<Kicked>();
+        }
+    }
+}
+
+#[derive(Component)]
+struct Kicked(Vec2);
+
+fn reflect_velocity(velocity: Vec2, normal: Vec2) -> Vec2 {
+    velocity - 2.0 * velocity.dot(normal) * normal
+}
+
+fn get_wall_normal(position: IVec2, map: &Map) -> Vec2 {
+    let mut normal = Vec2::ZERO;
+    if map.contains_key(&(position + IVec2::X)) {
+        normal += Vec2::NEG_X;
+    }
+    if map.contains_key(&(position - IVec2::X)) {
+        normal += Vec2::X;
+    }
+    if map.contains_key(&(position + IVec2::Y)) {
+        normal += Vec2::NEG_Y;
+    }
+    if map.contains_key(&(position - IVec2::Y)) {
+        normal += Vec2::Y;
+    }
+
+    normal.normalize_or_zero()
 }

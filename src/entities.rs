@@ -15,6 +15,7 @@ pub fn plugin(app: &mut App) {
 pub enum Interactable {
     Ball,
     Person,
+    Wall,
 }
 
 #[derive(Resource, Default, Deref, DerefMut, Reflect)]

@@ -5,7 +5,7 @@ use priority_queue::PriorityQueue;
 
 use crate::{AppSet, to_ivec2, to_world};
 
-use super::PointerIsDirty;
+use super::{PointerIsDirty, Velocity};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
@@ -85,6 +85,7 @@ pub fn calculate_path(start: Vec3, target: Vec3) -> Result<Vec<IVec2>, PathError
                     break;
                 }
             }
+            path.pop();
             path.reverse();
             return Ok(path);
         }
@@ -111,17 +112,32 @@ fn tick_path(time: Res<Time>, mut query: Query<&mut CalculatedPath>) {
 
 fn follow_path(
     mut dirt: ResMut<PointerIsDirty>,
-    mut query: Query<(&mut Transform, &mut CalculatedPath, Entity)>,
+    mut query: Query<(
+        &mut Transform,
+        &mut CalculatedPath,
+        Option<&mut Velocity>,
+        Entity,
+    )>,
     mut commands: Commands,
 ) {
-    for (mut transform, mut path, entity) in &mut query {
+    for (mut transform, mut path, velocity_option, entity) in &mut query {
         if !path.timer.finished() {
             continue;
         }
 
         if let Some(next) = path.next() {
-            transform.translation = (to_world(next), transform.translation.z).into()
+            let previous = transform.translation;
+            transform.translation = to_world(next).extend(transform.translation.z);
+            if let Some(mut velocity) = velocity_option {
+                velocity.0 += (transform.translation - previous).truncate();
+            }
         } else {
+            info!(
+                "{} (started at {:?}) arrived at target {:?}",
+                entity,
+                path.path.first(),
+                path.path.last()
+            );
             commands.entity(entity).remove::<CalculatedPath>();
         }
         dirt.0 = true;

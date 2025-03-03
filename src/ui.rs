@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{color::palettes::css::GREY, prelude::*};
 
 use crate::{
     FontAsset, PostUpdateSet,
@@ -45,13 +45,19 @@ fn update_ui(
                     ));
                 }
             };
-            for (key, name, _) in &actions.actions {
+            for (key, name, available) in &actions.actions {
+                let color = if *available {
+                    Color::WHITE
+                } else {
+                    GREY.into()
+                };
                 info.spawn((
                     Text::from(format!("{} - {}", key, name)),
                     TextFont {
                         font: font_asset.clone_weak(),
                         ..default()
                     },
+                    TextColor(color),
                 ));
             }
         });
