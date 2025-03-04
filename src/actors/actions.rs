@@ -17,6 +17,7 @@ use super::{
 
 pub fn plugin(app: &mut App) {
     app.register_type::<CurrentActions>()
+        .register_type::<Kicked>()
         .insert_resource(CurrentActions { actions: vec![] })
         .add_plugins(InputManagerPlugin::<Slots>::default())
         .add_plugins(InputManagerPlugin::<PlayerAbilities>::default())
@@ -26,12 +27,7 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (
-                report_abilities_used,
-                process_actions,
-                process_kick,
-            )
-                .in_set(AppSet::Update),
+            (report_abilities_used, process_actions, process_kick).in_set(AppSet::Update),
         )
         .add_systems(
             PostUpdate,
@@ -276,34 +272,34 @@ fn process_kick(
 ) {
     const EPSILON: f32 = 0.1;
     for (mut transform, mut kicked, entity) in &mut query {
-        let mut position = transform.translation;
+        let mut translation = transform.translation;
         let total_movement = kicked.0 * time.delta_secs();
         let steps = total_movement.length().ceil() as i32;
         let step_size = total_movement.extend(0.0) / steps as f32;
 
         let mut exit = false;
         for _ in 0..steps {
-            let next_translation = position + step_size;
+            let next_translation = translation + step_size;
+            let current_position = to_ivec2(translation);
             let next_position = to_ivec2(next_translation);
             if let Some(entities) = map.get(&next_position) {
                 for entity in entities {
                     match interactables.get(*entity).unwrap() {
                         Interactable::Wall => {
-                            info!("hit a wall");
-                            let normal = get_wall_normal(next_position, &map);
+                            let normal = get_wall_normal(current_position, &map);
                             kicked.0 = reflect_velocity(kicked.0, normal);
                             exit = true;
                         }
-                        _ => ()
+                        _ => (),
                     }
                 }
             }
             if exit {
                 break;
             }
-            position = next_translation;
+            translation = next_translation;
         }
-        transform.translation = position;
+        transform.translation = translation;
         kicked.0 *= 0.9;
         if kicked.0.length() < EPSILON {
             commands.entity(entity).remove::<Kicked>();
@@ -311,8 +307,9 @@ fn process_kick(
     }
 }
 
-#[derive(Component)]
-struct Kicked(Vec2);
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct Kicked(pub Vec2);
 
 fn reflect_velocity(velocity: Vec2, normal: Vec2) -> Vec2 {
     velocity - 2.0 * velocity.dot(normal) * normal

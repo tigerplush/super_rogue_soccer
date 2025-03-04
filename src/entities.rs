@@ -11,7 +11,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostUpdate, update_map.in_set(PostUpdateSet::Calculate));
 }
 
-#[derive(Component)]
+#[derive(Component, PartialEq)]
 pub enum Interactable {
     Ball,
     Person,

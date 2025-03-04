@@ -12,6 +12,9 @@ mod states;
 mod theme;
 mod ui;
 
+#[cfg(feature = "debug")]
+mod debug;
+
 pub struct SuperRogueSoccerPlugin;
 
 impl Plugin for SuperRogueSoccerPlugin {
@@ -36,6 +39,8 @@ impl Plugin for SuperRogueSoccerPlugin {
             map::plugin,
             entities::plugin,
             ui::plugin,
+            #[cfg(feature = "debug")]
+            debug::plugin,
         ));
         app.load_resource::<GlyphAsset>();
         app.load_resource::<PanelBorderAsset>();
