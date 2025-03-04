@@ -27,8 +27,9 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (report_abilities_used, process_actions, process_kick).in_set(AppSet::Update),
+            (report_abilities_used, process_actions, process_control).in_set(AppSet::Update),
         )
+        .add_systems(FixedUpdate, process_kick)
         .add_systems(
             PostUpdate,
             calculate_current_actions
@@ -49,7 +50,7 @@ fn calculate_current_actions(
     pointer: Single<&Transform, With<PointerObject>>,
     interactables: Query<&Interactable>,
     ability_slot: Single<&mut AbilitySlotMap>,
-    stats: Single<&Stats, With<CurrentPlayer>>,
+    current_player: Single<(&Stats, Option<&Claimed>), With<CurrentPlayer>>,
     mut commands: Commands,
 ) {
     let mut slot_map = ability_slot.into_inner();
@@ -58,6 +59,7 @@ fn calculate_current_actions(
     let transform = pointer.into_inner();
     let target_position = to_ivec2(transform.translation);
     let mut actions = vec![];
+    let (stats, claimed_option) = current_player.into_inner();
     let in_range = path.path.len() <= stats.ap;
 
     actions.push(("f".to_string(), "walk".to_string(), in_range));
@@ -67,7 +69,11 @@ fn calculate_current_actions(
 
     if let Some(entities) = map.get(&target_position) {
         for &entity in entities {
-            actions.push(("g".to_string(), "take control".to_string(), in_range));
+            actions.push((
+                "g".to_string(),
+                "take control".to_string(),
+                in_range && claimed_option.is_none(),
+            ));
             actions.push(("h".to_string(), "kick".to_string(), in_range));
             if in_range {
                 slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
@@ -82,6 +88,13 @@ fn calculate_current_actions(
             }
         }
     }
+    if claimed_option.is_some() {
+        actions.push(("j".to_string(), "pass".to_string(), true));
+        slot_map.insert(
+            Slots::Ability4,
+            PlayerAbilities::Pass(claimed_option.unwrap().0),
+        );
+    }
     commands.insert_resource(CurrentActions { actions });
 }
 
@@ -91,6 +104,7 @@ pub enum PlayerAbilities {
     TakeControl(Entity),
     Kick(Entity),
     Foul(Entity),
+    Pass(Entity),
 }
 
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug, Copy)]
@@ -161,6 +175,8 @@ enum Action {
     Kick(Entity),
     TakeControl(Entity),
     Foul(Entity),
+    /// Which entity has to be passed where
+    Pass(Entity, Vec3),
 }
 
 fn report_abilities_used(
@@ -182,39 +198,19 @@ fn report_abilities_used(
                 PlayerAbilities::Kick(target) => {
                     queue.0.push(Action::Kick(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
-                    // find current team member
-                    // check if in range
-                    // if in range, move there and add velocity to target
-                    // velocity is proportional to the moved fields and kick strength
-                    // vector and accuracy is proportional to taken path and skill
-
-                    // this could lead to fun experiments where e.g. Dugle McFrouglas takes control over a team member
-                    // kicks the team member into an enemy, who will die and the team member, because of hurting the enemy
-                    // will be expulsed from the game while Dugle McFrouglas still remains
-
-                    // Also, you could use one player really good at kicking to maneuver team members over the field
                 }
                 PlayerAbilities::TakeControl(target) => {
                     queue.0.push(Action::TakeControl(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
-                    // find current team member
-                    // check if in range
-                    // if in range, move there and try to take control
-                    // with unclaimed ball will always work
-                    // with claimed ball, roll wit against each other
-                    // with enemy, roll atk vs defense?
-                    // now target is claimed and will move with the entity
-                    // enemies get a chance to free themselves every round
                 }
                 PlayerAbilities::Foul(target) => {
                     queue.0.push(Action::Foul(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
-                    // find current team member
-                    // check if in range
-                    // if in range, move there
-                    // roll atk vs defense
-                    // if succesful, target is hurt -> may die
-                    // entity will receive a caution, when receiving a second caution, entity is eliminated from play
+                }
+                PlayerAbilities::Pass(target) => {
+                    queue
+                        .0
+                        .push(Action::Pass(target, target_transform.translation));
                 }
             }
         }
@@ -222,6 +218,7 @@ fn report_abilities_used(
 }
 
 fn process_actions(
+    time: Res<Time<Fixed>>,
     mut query: Query<(
         Entity,
         &Transform,
@@ -252,12 +249,50 @@ fn process_actions(
                     commands
                         .entity(target)
                         .insert(Kicked(velocity.0 * stats.kick_strength));
+                    info!(
+                        "kicking, {} should now have {} velocity",
+                        target,
+                        velocity.0 * stats.kick_strength
+                    );
                 }
-                Action::TakeControl(target) => {}
+                Action::TakeControl(target) => {
+                    commands.entity(entity).insert(Claimed(target));
+                    commands.entity(target).insert(ClaimedBy(entity));
+                }
                 Action::Foul(target) => {}
+                Action::Pass(target, target_position) => {
+                    let velocity = calculate_kick_velocity(
+                        stats.passing_skill,
+                        transform.translation.truncate(),
+                        target_position.truncate(),
+                        time.delta_secs(),
+                        velocity.0,
+                    );
+                    commands
+                        .entity(target)
+                        .insert(Kicked(velocity))
+                        .remove::<ClaimedBy>();
+                    commands.entity(entity).remove::<Claimed>();
+                }
             }
         }
     }
+}
+
+pub fn calculate_kick_velocity(
+    pass_distance: f32,
+    ball_position: Vec2,
+    target_position: Vec2,
+    time: f32,
+    velocity: Vec2,
+) -> Vec2 {
+    let diff = target_position - ball_position;
+    let direction = diff.normalize_or_zero();
+    let actual_distance = diff.length() / 8.0;
+
+    let speed = (pass_distance / time).min(actual_distance / time);
+    let kick_velocity = direction * speed + velocity * 0.5;
+    kick_velocity
 }
 
 fn process_kick(
@@ -287,9 +322,7 @@ fn process_kick(
                             kicked.0 = reflect_velocity(kicked.0, normal);
                             exit = true;
                         }
-                        Interactable::Person => {
-                            
-                        }
+                        Interactable::Person => {}
                         _ => (),
                     }
                 }
@@ -331,4 +364,22 @@ fn get_wall_normal(position: IVec2, map: &Map) -> Vec2 {
     }
 
     normal.normalize_or_zero()
+}
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct ClaimedBy(Entity);
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct Claimed(Entity);
+
+fn process_control(
+    mut query: Query<(&mut Transform, &ClaimedBy), Without<Claimed>>,
+    transforms: Query<&Transform, With<Claimed>>,
+) {
+    for (mut transform, claim) in &mut query {
+        let parent = transforms.get(claim.0).unwrap();
+        transform.translation = parent.translation;
+    }
 }

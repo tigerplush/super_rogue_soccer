@@ -1,6 +1,6 @@
-use actions::ActionQueue;
+use actions::{ActionQueue, Claimed, calculate_kick_velocity};
 use bevy::{
-    color::palettes::css::{GREEN, RED, YELLOW},
+    color::palettes::css::{GREEN, RED, WHITE, YELLOW},
     prelude::*,
 };
 use leafwing_input_manager::prelude::*;
@@ -15,13 +15,25 @@ pub fn plugin(app: &mut App) {
     app.register_type::<Stats>()
         .register_type::<Velocity>()
         .insert_resource(PointerIsDirty(true))
+        .insert_gizmo_config(
+            PassPreviewGizmos {},
+            GizmoConfig {
+                line_style: GizmoLineStyle::Dotted,
+                ..default()
+            },
+        )
         .add_plugins(InputManagerPlugin::<PointerActions>::default())
         .add_plugins((pathfinding::plugin, actions::plugin))
         .add_systems(
             Update,
             (
                 tick_pointer.in_set(AppSet::TickTimers),
-                (update_pointer, preview_path.after(update_pointer)).in_set(AppSet::Update),
+                (
+                    update_pointer,
+                    preview_path.after(update_pointer),
+                    preview_pass,
+                )
+                    .in_set(AppSet::Update),
             ),
         )
         .add_systems(Last, remove_dirty.run_if(is_dirty));
@@ -91,6 +103,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             Stats {
                 ap: 8,
                 kick_strength: 15.0,
+                passing_skill: 50.0,
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
@@ -201,11 +214,47 @@ fn preview_path(
     }
 }
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct PassPreviewGizmos {}
+
+fn preview_pass(
+    time: Res<Time<Fixed>>,
+    current_player_option: Option<
+        Single<(&Stats, &Transform, &Velocity), (With<CurrentPlayer>, With<Claimed>)>,
+    >,
+    query: Option<Single<&Transform, (With<PointerObject>, Without<CurrentPlayer>)>>,
+    mut gizmos: Gizmos<PassPreviewGizmos>,
+) {
+    let Some(current_player) = current_player_option else {
+        return;
+    };
+    let Some(pointer) = query else {
+        return;
+    };
+    let (stats, transform, velocity) = current_player.into_inner();
+    let mut kick_vel = calculate_kick_velocity(
+        stats.passing_skill,
+        transform.translation.truncate(),
+        pointer.translation.truncate(),
+        time.delta_secs(),
+        velocity.0,
+    );
+
+    let mut end_point = Vec2::ZERO;
+    while kick_vel.length() > 0.1 {
+        end_point += kick_vel * time.delta_secs();
+        kick_vel *= 0.9;
+    }
+
+    gizmos.line_2d(transform.translation.truncate(), end_point, WHITE);
+}
+
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 struct Stats {
     ap: usize,
     kick_strength: f32,
+    passing_skill: f32,
 }
 
 #[derive(Component, Reflect)]

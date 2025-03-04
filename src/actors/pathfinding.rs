@@ -132,12 +132,6 @@ fn follow_path(
                 velocity.0 += (transform.translation - previous).truncate();
             }
         } else {
-            info!(
-                "{} (started at {:?}) arrived at target {:?}",
-                entity,
-                path.path.first(),
-                path.path.last()
-            );
             commands.entity(entity).remove::<CalculatedPath>();
         }
         dirt.0 = true;
