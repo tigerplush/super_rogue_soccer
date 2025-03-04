@@ -70,13 +70,13 @@ fn calculate_current_actions(
             actions.push(("g".to_string(), "take control".to_string(), in_range));
             actions.push(("h".to_string(), "kick".to_string(), in_range));
             if in_range {
-                slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl);
+                slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
                 slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
             }
             match interactables.get(entity).unwrap() {
                 &Interactable::Person => {
                     actions.push(("i".to_string(), "foul".to_string(), in_range));
-                    slot_map.insert(Slots::Ability3, PlayerAbilities::Foul);
+                    slot_map.insert(Slots::Ability3, PlayerAbilities::Foul(entity));
                 }
                 _ => (),
             }
@@ -88,9 +88,9 @@ fn calculate_current_actions(
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug, Copy)]
 pub enum PlayerAbilities {
     Walk,
-    TakeControl,
+    TakeControl(Entity),
     Kick(Entity),
-    Foul,
+    Foul(Entity),
 }
 
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug, Copy)]
@@ -194,8 +194,8 @@ fn report_abilities_used(
 
                     // Also, you could use one player really good at kicking to maneuver team members over the field
                 }
-                PlayerAbilities::TakeControl => {
-                    // queue.0.push(Action::TakeControl(target_entity));
+                PlayerAbilities::TakeControl(target) => {
+                    queue.0.push(Action::TakeControl(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
                     // find current team member
                     // check if in range
@@ -206,8 +206,8 @@ fn report_abilities_used(
                     // now target is claimed and will move with the entity
                     // enemies get a chance to free themselves every round
                 }
-                PlayerAbilities::Foul => {
-                    // queue.0.push(Action::Foul(target_entity));
+                PlayerAbilities::Foul(target) => {
+                    queue.0.push(Action::Foul(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
                     // find current team member
                     // check if in range
@@ -216,7 +216,6 @@ fn report_abilities_used(
                     // if succesful, target is hurt -> may die
                     // entity will receive a caution, when receiving a second caution, entity is eliminated from play
                 }
-                _ => (),
             }
         }
     }
@@ -255,9 +254,7 @@ fn process_actions(
                         .insert(Kicked(velocity.0 * stats.kick_strength));
                 }
                 Action::TakeControl(target) => {}
-                _ => {
-                    info!("performing action");
-                }
+                Action::Foul(target) => {}
             }
         }
     }
@@ -289,6 +286,9 @@ fn process_kick(
                             let normal = get_wall_normal(current_position, &map);
                             kicked.0 = reflect_velocity(kicked.0, normal);
                             exit = true;
+                        }
+                        Interactable::Person => {
+                            
                         }
                         _ => (),
                     }

@@ -15,7 +15,7 @@ pub fn plugin(app: &mut App) {
 
 pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
     let height = field::FIELD.lines().count();
-    let width = field::FIELD.lines().nth(0).unwrap().chars().count();
+    let width = field::FIELD.lines().next().unwrap().chars().count();
     let map_size = TilemapSize {
         x: width as u32,
         y: height as u32,

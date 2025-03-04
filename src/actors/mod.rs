@@ -186,7 +186,7 @@ fn preview_path(
     let path = path.unwrap();
     let (stats, transform) = current_player.unwrap().into_inner();
 
-    if path.path.len() > 0 {
+    if !path.path.is_empty() {
         gizmos.arrow_2d(
             transform.translation.truncate(),
             to_world(path.path[0]),
