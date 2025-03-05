@@ -16,6 +16,7 @@ pub enum Interactable {
     Ball,
     Person,
     Wall,
+    Goal,
 }
 
 #[derive(Resource, Default, Deref, DerefMut, Reflect)]

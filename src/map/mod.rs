@@ -8,6 +8,7 @@ mod field;
 const EMPTY: u32 = 0;
 const MARKINGS: u32 = 11 * 16;
 const FULL: u32 = 13 * 16 + 11;
+const GOAL_NET: u32 = 13 * 16 + 13;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(TilemapPlugin);
@@ -37,6 +38,14 @@ pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
                         Name::from(format!("Wall {x},{y}")),
                     ));
                     TileTextureIndex(FULL)
+                }
+                '|' => {
+                    vec.push((
+                        Vec3::new(x as f32 * 8.0, y as f32 * 8.0, 0.0),
+                        Interactable::Goal,
+                        Name::from(format!("Goal {x},{y}")),
+                    ));
+                    TileTextureIndex(GOAL_NET)
                 }
                 '.' => TileTextureIndex(MARKINGS),
                 _ => TileTextureIndex(EMPTY),

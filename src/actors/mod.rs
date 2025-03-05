@@ -1,6 +1,6 @@
 use actions::{ActionQueue, Claimed, calculate_kick_velocity};
 use bevy::{
-    color::palettes::css::{GREEN, RED, WHITE, YELLOW},
+    color::palettes::css::{GREEN, LIGHT_CYAN, ORANGE, RED, WHITE, YELLOW},
     prelude::*,
 };
 use leafwing_input_manager::prelude::*;
@@ -58,6 +58,12 @@ pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
     dirt.0
 }
 
+#[derive(Component)]
+enum Team {
+    Player,
+    Enemy,
+}
+
 pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     commands.spawn((
         Name::from("Ball"),
@@ -96,6 +102,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                     index: 1,
                     layout: glyphs.atlas.clone_weak(),
                 }),
+                color: ORANGE.into(),
                 ..default()
             },
             Transform::from_xyz(position.1 * 8.0, position.2 * 8.0, 1.0),
@@ -107,10 +114,36 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
+            Team::Player,
         ));
         if index == 0 {
             player.insert(CurrentPlayer);
         }
+    }
+
+    for (_index, position) in positions.iter().enumerate() {
+        commands.spawn((
+            position.0.clone(),
+            Sprite {
+                image: glyphs.glyph.clone_weak(),
+                texture_atlas: Some(TextureAtlas {
+                    index: 1,
+                    layout: glyphs.atlas.clone_weak(),
+                }),
+                color: LIGHT_CYAN.into(),
+                ..default()
+            },
+            Transform::from_xyz(position.1 * -8.0, position.2 * 8.0, 1.0),
+            Interactable::Person,
+            Stats {
+                ap: 8,
+                kick_strength: 15.0,
+                passing_skill: 50.0,
+            },
+            ActionQueue::default(),
+            Velocity(Vec2::ZERO),
+            Team::Enemy
+        ));
     }
 
     let input_map = InputMap::default()
@@ -184,6 +217,9 @@ fn update_pointer(
                 }
             }
             dirt.0 = true;
+        }
+        if action_state.just_pressed(&PointerActions::NextTurn) {
+            info!("next turn");
         }
     }
 }

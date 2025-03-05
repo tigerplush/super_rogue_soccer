@@ -12,19 +12,26 @@
 8. players have abilities
 
 ## ToDo
+- add counting goals
+- add turn based player cycling
+- add enemies and AI
 - Pathfinding should take world into consideration
 - bug in preview (show from current player or don't show at all)
 - All actions cost ap
-- Shot preview
-- Team members walk onto field (esc to cancel)
-- Trillerpfeife for start
-- Heat
+- show player info
+- don't show commands for self
+- Turn infos (PLAYERS TURN / ENEMYS TURN)
+- add sound
 - Perks/Abilities
-- Encyclopedia
 - Random maps
 - In debug, skip splashscreen
 - Tab for overlay
-- Turn infos (PLAYERS TURN / ENEMYS TURN)
+- generate random flag
+- generate random player names
+- Team members walk onto field (esc to cancel)
+- Trillerpfeife for start
+- Heat
+- Encyclopedia
 
 # Research
 https://www.bundesliga.com/de/faq/fussball-allgemein/torwart-abwehr-mittelfeld-angriff-welche-positionen-gibt-es-im-fussball-22370
