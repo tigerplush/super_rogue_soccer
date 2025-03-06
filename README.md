@@ -16,8 +16,6 @@
 - add enemies and AI
 - bug in preview (show from current player or don't show at all)
 - All actions cost ap
-- show player info
-- don't show commands for self
 - add sound
 - Perks/Abilities
 - Random maps

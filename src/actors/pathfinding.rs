@@ -96,23 +96,16 @@ pub fn calculate_path(start: Vec3, target: Vec3, map: &Map) -> Result<Vec<IVec2>
 
         for direction in DIRECTIONS {
             let neighbor = current_coordinates + direction;
-            let mut passable = true;
+            let mut cost = 1;
             if let Some(next) = map.get(&neighbor) {
                 for (_, interactable) in next {
-                    let occupied = match interactable {
-                        &Interactable::Ball => false,
-                        _ => true,
+                    cost += match interactable {
+                        &Interactable::Person => 10,
+                        _ => 0,
                     };
-                    passable = passable && !occupied;
-                    if !passable {
-                        break;
-                    }
                 }
             }
-            if !passable {
-                continue;
-            }
-            let new_cost = cost_so_far.get(&current_coordinates).unwrap() + 1;
+            let new_cost = cost_so_far.get(&current_coordinates).unwrap() + cost;
             let current_cost = cost_so_far.get(&neighbor);
             if current_cost.is_none() || new_cost < *current_cost.unwrap() {
                 cost_so_far.insert(neighbor, new_cost);

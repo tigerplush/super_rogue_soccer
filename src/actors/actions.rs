@@ -100,7 +100,7 @@ fn calculate_current_actions(
                 match interactable {
                     Interactable::Person => {
                         entity_actions.push(("i".to_string(), "foul".to_string(), in_range));
-                        slot_map.insert(Slots::Ability3, PlayerAbilities::Foul(entity));
+                        slot_map.insert(Slots::Ability4, PlayerAbilities::Foul(entity));
                     }
                     _ => (),
                 }
@@ -215,11 +215,13 @@ fn report_abilities_used(
     let target_transform = target.unwrap().into_inner();
     for ability_state in &query {
         for ability in ability_state.get_just_pressed() {
+            info!("pressed {:?}", ability);
             match ability {
                 PlayerAbilities::Walk => {
                     queue.0.push(Action::MoveTo(target_transform.translation));
                 }
                 PlayerAbilities::Kick(target) => {
+                    info!("trying to kick {}", target);
                     queue.0.push(Action::Kick(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
                 }

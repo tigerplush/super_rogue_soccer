@@ -3,16 +3,15 @@ use bevy::{color::palettes::css::GREY, prelude::*};
 use crate::{
     FontAsset, PostUpdateSet,
     actors::{
-        PointerObject, Stats,
+        Stats,
         actions::{CurrentActions, PossibleAction},
         is_dirty,
     },
-    entities::{Interactable, Map},
+    entities::Interactable,
     states::{
         AppState,
         gameplay::{InfoContainer, Log},
     },
-    to_ivec2,
 };
 
 pub fn plugin(app: &mut App) {
@@ -35,36 +34,28 @@ pub fn plugin(app: &mut App) {
 fn update_ui(
     actions: Res<CurrentActions>,
     font_asset: Res<FontAsset>,
-    map: Res<Map>,
     ui_elements: Single<Entity, With<InfoContainer>>,
-    pointer: Single<&Transform, With<PointerObject>>,
     interactables: Query<&Name, With<Interactable>>,
     stat_blocks: Query<&Stats>,
     mut commands: Commands,
 ) {
     let entity = ui_elements.into_inner();
-    let pointer = pointer.into_inner();
     commands
         .entity(entity)
         .despawn_descendants()
         .with_children(|info| {
-            let position = to_ivec2(pointer.translation);
-            if let Some(vec) = map.get(&position) {
-                for (entity, _) in vec {
-                    let name = interactables.get(*entity).unwrap();
-                    info.spawn((
-                        Text::from(name.as_str()),
-                        TextFont {
-                            font: font_asset.clone_weak(),
-                            ..default()
-                        },
-                    ));
-                }
-            };
             for action in &actions.actions {
                 match action {
                     PossibleAction::StatBlock(entity) => {
                         if let Ok(stat) = stat_blocks.get(*entity) {
+                            let name = interactables.get(*entity).unwrap();
+                            info.spawn((
+                                Text::from(name.to_string()),
+                                TextFont {
+                                    font: font_asset.clone_weak(),
+                                    ..default()
+                                },
+                            ));
                             info.spawn((
                                 Text::from(stat.to_string()),
                                 TextFont {
