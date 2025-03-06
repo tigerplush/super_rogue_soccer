@@ -1,3 +1,5 @@
+use std::default;
+
 use bevy::prelude::*;
 
 pub mod gameplay;
@@ -14,8 +16,17 @@ pub enum AppState {
     Gameplay,
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, SubStates)]
+#[source(AppState = AppState::Gameplay)]
+pub enum GameplayStates {
+    #[default]
+    PlayerTurn,
+    EnemyTurn,
+}
+
 pub fn plugin(app: &mut App) {
-    app.init_state::<AppState>();
+    app.init_state::<AppState>()
+        .add_sub_state::<GameplayStates>();
 
     app.enable_state_scoped_entities::<AppState>();
     app.add_plugins((splash::plugin, loading::plugin, gameplay::plugin));

@@ -9,6 +9,7 @@ use pathfinding::calculate_path;
 use crate::{AppSet, GlyphAsset, entities::Interactable, to_world};
 
 pub mod actions;
+mod names;
 mod pathfinding;
 
 pub fn plugin(app: &mut App) {
@@ -64,6 +65,14 @@ enum Team {
     Enemy,
 }
 
+#[derive(Component, Clone)]
+enum CharacterClass {
+    Goalkeeper,
+    CentralDefender,
+    Midfielder,
+    Attacker
+}
+
 pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     commands.spawn((
         Name::from("Ball"),
@@ -80,17 +89,17 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     ));
 
     let positions = [
-        (Name::from("Center-Forward"), -4.0, 0.0),
-        (Name::from("Goalkeeper"), -45.0, 0.0),
-        (Name::from("Central-Defender Left"), -30.0, 8.0),
-        (Name::from("Central-Defender Right"), -30.0, -8.0),
-        (Name::from("Left-Back"), -30.0, 24.0),
-        (Name::from("Right-Back"), -30.0, -24.0),
-        (Name::from("Center-Right"), -5.0, 16.0),
-        (Name::from("Center-Left"), -5.0, -16.0),
-        (Name::from("Midfield-Center"), -18.0, 0.0),
-        (Name::from("Midfield-Right"), -15.0, 12.0),
-        (Name::from("Midfield-Left"), -15.0, -12.0),
+        (Name::from("Center-Forward"), -4.0, 0.0, CharacterClass::Attacker),
+        (Name::from("Goalkeeper"), -45.0, 0.0, CharacterClass::Goalkeeper),
+        (Name::from("Central-Defender Left"), -30.0, 8.0, CharacterClass::CentralDefender),
+        (Name::from("Central-Defender Right"), -30.0, -8.0, CharacterClass::CentralDefender),
+        (Name::from("Left-Back"), -30.0, 24.0, CharacterClass::CentralDefender),
+        (Name::from("Right-Back"), -30.0, -24.0, CharacterClass::CentralDefender),
+        (Name::from("Center-Right"), -5.0, 16.0, CharacterClass::Attacker),
+        (Name::from("Center-Left"), -5.0, -16.0, CharacterClass::Attacker),
+        (Name::from("Midfield-Center"), -18.0, 0.0, CharacterClass::Midfielder),
+        (Name::from("Midfield-Right"), -15.0, 12.0, CharacterClass::Midfielder),
+        (Name::from("Midfield-Left"), -15.0, -12.0, CharacterClass::Midfielder),
     ];
 
     for (index, position) in positions.iter().enumerate() {
@@ -111,10 +120,13 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 ap: 8,
                 kick_strength: 15.0,
                 passing_skill: 50.0,
+                wit: 1.0,
+                defense: 1.0,
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
             Team::Player,
+            position.3.clone(),
         ));
         if index == 0 {
             player.insert(CurrentPlayer);
@@ -139,10 +151,13 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 ap: 8,
                 kick_strength: 15.0,
                 passing_skill: 50.0,
+                wit: 1.0,
+                defense: 1.0,
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
-            Team::Enemy
+            Team::Enemy,
+            position.3.clone(),
         ));
     }
 
@@ -291,6 +306,14 @@ struct Stats {
     ap: usize,
     kick_strength: f32,
     passing_skill: f32,
+    wit: f32,
+    defense: f32,
+}
+
+impl Stats {
+    fn from_class() -> Self {
+        Stats { ap: 10, kick_strength: 15.0, passing_skill: 50.0, wit: 1.0, defense: 1.0 }
+    }
 }
 
 #[derive(Component, Reflect)]
