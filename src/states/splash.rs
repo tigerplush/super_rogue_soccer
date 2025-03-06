@@ -12,12 +12,11 @@ pub fn plugin(app: &mut App) {
     app.register_type::<ImageNodeFadeInOut>()
         .register_type::<SplashTimer>()
         .add_systems(OnEnter(AppState::Splash), (startup, insert_splash_timer))
+        .add_systems(Update, tick_fade_in_out)
         .add_systems(
             Update,
-            (
-                tick_fade_in_out.in_set(AppSet::TickTimers),
-                apply_fade_in_out.in_set(AppSet::Update),
-            )
+            apply_fade_in_out
+                .in_set(AppSet::Update)
                 .run_if(in_state(AppState::Splash)),
         )
         .add_systems(
@@ -83,7 +82,7 @@ fn apply_fade_in_out(mut animation_query: Query<(&ImageNodeFadeInOut, &mut Image
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-struct ImageNodeFadeInOut {
+pub struct ImageNodeFadeInOut {
     /// Total duration in seconds.
     total_duration: f32,
     /// Fade duration in seconds.
@@ -93,13 +92,32 @@ struct ImageNodeFadeInOut {
 }
 
 impl ImageNodeFadeInOut {
-    fn alpha(&self) -> f32 {
+    pub fn alpha(&self) -> f32 {
         // Normalize by duration.
         let t = (self.t / self.total_duration).clamp(0.0, 1.0);
         let fade = self.fade_duration / self.total_duration;
 
         // Regular trapezoid-shaped graph, flat at the top with alpha = 1.0.
         ((1.0 - (2.0 * t - 1.0).abs()) / fade).min(1.0)
+    }
+
+    pub fn with_t(mut self, t: f32) -> Self {
+        self.t = t;
+        self
+    }
+
+    pub fn elapsed(&self) -> bool {
+        self.t >= self.total_duration
+    }
+}
+
+impl Default for ImageNodeFadeInOut {
+    fn default() -> Self {
+        ImageNodeFadeInOut {
+            total_duration: SPLASH_DURATION_SECS,
+            fade_duration: SPLASH_FADE_DURATION_SECS,
+            t: 0.0,
+        }
     }
 }
 

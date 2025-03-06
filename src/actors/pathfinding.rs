@@ -3,7 +3,11 @@ use std::{cmp::Reverse, collections::HashMap};
 use bevy::prelude::*;
 use priority_queue::PriorityQueue;
 
-use crate::{AppSet, to_ivec2, to_world};
+use crate::{
+    AppSet,
+    entities::{Interactable, Map},
+    to_ivec2, to_world,
+};
 
 use super::{PointerIsDirty, Velocity};
 
@@ -58,7 +62,7 @@ const DIRECTIONS: [IVec2; 8] = [
     IVec2::new(1, -1),
 ];
 
-pub fn calculate_path(start: Vec3, target: Vec3) -> Result<Vec<IVec2>, PathError> {
+pub fn calculate_path(start: Vec3, target: Vec3, map: &Map) -> Result<Vec<IVec2>, PathError> {
     let start_position = to_ivec2(start);
     let target_position = to_ivec2(target);
 
@@ -92,6 +96,22 @@ pub fn calculate_path(start: Vec3, target: Vec3) -> Result<Vec<IVec2>, PathError
 
         for direction in DIRECTIONS {
             let neighbor = current_coordinates + direction;
+            let mut passable = true;
+            if let Some(next) = map.get(&neighbor) {
+                for (_, interactable) in next {
+                    let occupied = match interactable {
+                        &Interactable::Ball => false,
+                        _ => true,
+                    };
+                    passable = passable && !occupied;
+                    if !passable {
+                        break;
+                    }
+                }
+            }
+            if !passable {
+                continue;
+            }
             let new_cost = cost_so_far.get(&current_coordinates).unwrap() + 1;
             let current_cost = cost_so_far.get(&neighbor);
             if current_cost.is_none() || new_cost < *current_cost.unwrap() {

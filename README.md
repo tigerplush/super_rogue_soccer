@@ -13,14 +13,11 @@
 
 ## ToDo
 - add counting goals
-- add turn based player cycling
 - add enemies and AI
-- Pathfinding should take world into consideration
 - bug in preview (show from current player or don't show at all)
 - All actions cost ap
 - show player info
 - don't show commands for self
-- Turn infos (PLAYERS TURN / ENEMYS TURN)
 - add sound
 - Perks/Abilities
 - Random maps

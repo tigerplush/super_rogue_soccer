@@ -2,7 +2,11 @@ use bevy::{color::palettes::css::GREY, prelude::*};
 
 use crate::{
     FontAsset, PostUpdateSet,
-    actors::{PointerObject, actions::CurrentActions, is_dirty},
+    actors::{
+        PointerObject, Stats,
+        actions::{CurrentActions, PossibleAction},
+        is_dirty,
+    },
     entities::{Interactable, Map},
     states::{
         AppState,
@@ -12,12 +16,20 @@ use crate::{
 };
 
 pub fn plugin(app: &mut App) {
-    app.add_event::<LogEvent>().insert_resource(Logs::default()).add_systems(
-        PostUpdate,
-        update_ui
-            .in_set(PostUpdateSet::Ui)
-            .run_if(in_state(AppState::Gameplay).and(is_dirty)),
-    ).add_systems(PostUpdate, update_log.in_set(PostUpdateSet::Ui).run_if(in_state(AppState::Gameplay)));
+    app.add_event::<LogEvent>()
+        .insert_resource(Logs::default())
+        .add_systems(
+            PostUpdate,
+            update_ui
+                .in_set(PostUpdateSet::Ui)
+                .run_if(in_state(AppState::Gameplay).and(is_dirty)),
+        )
+        .add_systems(
+            PostUpdate,
+            update_log
+                .in_set(PostUpdateSet::Ui)
+                .run_if(in_state(AppState::Gameplay)),
+        );
 }
 
 fn update_ui(
@@ -26,7 +38,8 @@ fn update_ui(
     map: Res<Map>,
     ui_elements: Single<Entity, With<InfoContainer>>,
     pointer: Single<&Transform, With<PointerObject>>,
-    interactables: Query<(&Name, &Interactable)>,
+    interactables: Query<&Name, With<Interactable>>,
+    stat_blocks: Query<&Stats>,
     mut commands: Commands,
 ) {
     let entity = ui_elements.into_inner();
@@ -37,8 +50,8 @@ fn update_ui(
         .with_children(|info| {
             let position = to_ivec2(pointer.translation);
             if let Some(vec) = map.get(&position) {
-                for &entity in vec {
-                    let (name, _) = interactables.get(entity).unwrap();
+                for (entity, _) in vec {
+                    let name = interactables.get(*entity).unwrap();
                     info.spawn((
                         Text::from(name.as_str()),
                         TextFont {
@@ -48,20 +61,60 @@ fn update_ui(
                     ));
                 }
             };
-            for (key, name, available) in &actions.actions {
-                let color = if *available {
-                    Color::WHITE
-                } else {
-                    GREY.into()
-                };
-                info.spawn((
-                    Text::from(format!("{} - {}", key, name)),
-                    TextFont {
-                        font: font_asset.clone_weak(),
-                        ..default()
-                    },
-                    TextColor(color),
-                ));
+            for action in &actions.actions {
+                match action {
+                    PossibleAction::StatBlock(entity) => {
+                        if let Ok(stat) = stat_blocks.get(*entity) {
+                            info.spawn((
+                                Text::from(stat.to_string()),
+                                TextFont {
+                                    font: font_asset.clone_weak(),
+                                    ..default()
+                                },
+                            ));
+                        }
+                    }
+                    PossibleAction::EntityCommands(target, commands) => {
+                        let target = interactables.get(*target).unwrap();
+                        info.spawn((
+                            Text::from(target.to_string()),
+                            TextFont {
+                                font: font_asset.clone_weak(),
+                                ..default()
+                            },
+                        ));
+                        for (key, command, available) in commands {
+                            let color = if *available {
+                                Color::WHITE
+                            } else {
+                                GREY.into()
+                            };
+                            info.spawn((
+                                Text::from(format!("{} - {}", key, command)),
+                                TextFont {
+                                    font: font_asset.clone_weak(),
+                                    ..default()
+                                },
+                                TextColor(color),
+                            ));
+                        }
+                    }
+                    PossibleAction::Command(key, command, available) => {
+                        let color = if *available {
+                            Color::WHITE
+                        } else {
+                            GREY.into()
+                        };
+                        info.spawn((
+                            Text::from(format!("{} - {}", key, command)),
+                            TextFont {
+                                font: font_asset.clone_weak(),
+                                ..default()
+                            },
+                            TextColor(color),
+                        ));
+                    }
+                }
             }
         });
 }

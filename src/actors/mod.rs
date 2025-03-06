@@ -8,7 +8,13 @@ use pathfinding::calculate_path;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use crate::{entities::Interactable, states::GameplayStates, to_world, ui::LogEvent, AppSet, GlyphAsset};
+use crate::{
+    AppSet, GlyphAsset,
+    entities::{Interactable, Map},
+    states::GameplayStates,
+    to_world,
+    ui::LogEvent,
+};
 
 pub mod actions;
 pub mod enemy;
@@ -244,6 +250,7 @@ struct PreviewPath {
 }
 
 fn update_pointer(
+    map: Res<Map>,
     mut dirt: ResMut<PointerIsDirty>,
     mut events: EventWriter<LogEvent>,
     mut query: Query<
@@ -259,10 +266,11 @@ fn update_pointer(
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
             transform.translation += Vec3::new(input.x * 8.0, input.y * 8.0, 0.0);
-                if let Ok(path) = calculate_path(start_transform.translation, transform.translation)
-                {
-                    commands.insert_resource(PreviewPath { path });
-                }
+            if let Ok(path) =
+                calculate_path(start_transform.translation, transform.translation, &map)
+            {
+                commands.insert_resource(PreviewPath { path });
+            }
             dirt.0 = true;
         }
         if action_state.just_pressed(&PointerActions::NextTurn) {
@@ -354,6 +362,16 @@ impl Stats {
             defense: 1.0,
             initiative: 10,
         }
+    }
+}
+
+impl std::fmt::Display for Stats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AP: {} | KICK STRENGTH: {}\nPASSING SKILL: {} | WIT {}\nDEFENSE: {}",
+            self.ap, self.kick_strength, self.passing_skill, self.wit, self.defense
+        )
     }
 }
 

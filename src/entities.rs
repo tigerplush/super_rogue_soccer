@@ -11,7 +11,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(PostUpdate, update_map.in_set(PostUpdateSet::Calculate));
 }
 
-#[derive(Component, PartialEq)]
+#[derive(Component, PartialEq, Reflect, Clone)]
 pub enum Interactable {
     Ball,
     Person,
@@ -22,15 +22,15 @@ pub enum Interactable {
 #[derive(Resource, Default, Deref, DerefMut, Reflect)]
 #[reflect(Resource)]
 pub struct Map {
-    map: HashMap<IVec2, Vec<Entity>>,
+    map: HashMap<IVec2, Vec<(Entity, Interactable)>>,
 }
 
-fn update_map(mut map: ResMut<Map>, query: Query<(&Transform, Entity), With<Interactable>>) {
+fn update_map(mut map: ResMut<Map>, query: Query<(&Transform, Entity, &Interactable)>) {
     map.clear();
-    for (transform, entity) in &query {
+    for (transform, entity, interactable) in &query {
         let position = to_ivec2(transform.translation);
         map.entry(position)
-            .and_modify(|vec| vec.push(entity))
-            .or_insert(vec![entity]);
+            .and_modify(|vec| vec.push((entity, interactable.clone())))
+            .or_insert(vec![(entity, interactable.clone())]);
     }
 }

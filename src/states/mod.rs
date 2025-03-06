@@ -1,5 +1,3 @@
-use std::default;
-
 use bevy::prelude::*;
 
 pub mod gameplay;

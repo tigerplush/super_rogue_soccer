@@ -41,16 +41,22 @@ pub fn plugin(app: &mut App) {
 #[derive(Resource, Reflect)]
 #[reflect(Resource)]
 pub struct CurrentActions {
-    pub actions: Vec<(String, String, bool)>,
+    pub actions: Vec<PossibleAction>,
+}
+
+#[derive(Reflect)]
+pub enum PossibleAction {
+    StatBlock(Entity),
+    EntityCommands(Entity, Vec<(String, String, bool)>),
+    Command(String, String, bool),
 }
 
 fn calculate_current_actions(
     map: Res<Map>,
     path: Res<PreviewPath>,
     pointer: Single<&Transform, With<PointerObject>>,
-    interactables: Query<&Interactable>,
     ability_slot: Single<&mut AbilitySlotMap>,
-    current_player: Single<(&Stats, Option<&Claimed>), With<CurrentPlayer>>,
+    current_player: Single<(Entity, &Stats, Option<&Claimed>), With<CurrentPlayer>>,
     mut commands: Commands,
 ) {
     let mut slot_map = ability_slot.into_inner();
@@ -59,37 +65,55 @@ fn calculate_current_actions(
     let transform = pointer.into_inner();
     let target_position = to_ivec2(transform.translation);
     let mut actions = vec![];
-    let (stats, claimed_option) = current_player.into_inner();
+    let (current_entity, stats, claimed_option) = current_player.into_inner();
     let in_range = path.path.len() <= stats.ap;
 
-    actions.push(("f".to_string(), "walk".to_string(), in_range));
+    if let Some(entities) = map.get(&target_position) {
+        if entities.iter().map(|(e, _)| *e).collect::<Vec<Entity>>().contains(&current_entity) {
+            actions.push(PossibleAction::StatBlock(current_entity));
+        }
+    }
+    actions.push(PossibleAction::Command(
+        "f".to_string(),
+        "walk".to_string(),
+        in_range,
+    ));
     if in_range {
         slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
     }
-
     if let Some(entities) = map.get(&target_position) {
-        for &entity in entities {
-            actions.push((
-                "g".to_string(),
-                "take control".to_string(),
-                in_range && claimed_option.is_none(),
-            ));
-            actions.push(("h".to_string(), "kick".to_string(), in_range));
-            if in_range {
-                slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
-                slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
-            }
-            match interactables.get(entity).unwrap() {
-                &Interactable::Person => {
-                    actions.push(("i".to_string(), "foul".to_string(), in_range));
-                    slot_map.insert(Slots::Ability3, PlayerAbilities::Foul(entity));
+        let mut sorted_vec = entities.clone();
+        sorted_vec.sort_by_key(|(e, _)| if *e == current_entity { 0 } else { 1 });
+        for (entity, interactable) in sorted_vec {
+            if entity != current_entity {
+                let mut entity_actions = vec![];
+                entity_actions.push((
+                    "g".to_string(),
+                    "take control".to_string(),
+                    in_range && claimed_option.is_none(),
+                ));
+                entity_actions.push(("h".to_string(), "kick".to_string(), in_range));
+                if in_range {
+                    slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
+                    slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
                 }
-                _ => (),
+                match interactable {
+                    Interactable::Person => {
+                        entity_actions.push(("i".to_string(), "foul".to_string(), in_range));
+                        slot_map.insert(Slots::Ability3, PlayerAbilities::Foul(entity));
+                    }
+                    _ => (),
+                }
+                actions.push(PossibleAction::EntityCommands(entity, entity_actions));
             }
         }
     }
     if claimed_option.is_some() {
-        actions.push(("j".to_string(), "pass".to_string(), true));
+        actions.push(PossibleAction::Command(
+            "j".to_string(),
+            "pass".to_string(),
+            true,
+        ));
         slot_map.insert(
             Slots::Ability4,
             PlayerAbilities::Pass(claimed_option.unwrap().0),
@@ -219,6 +243,7 @@ fn report_abilities_used(
 
 fn process_actions(
     time: Res<Time<Fixed>>,
+    map: Res<Map>,
     mut query: Query<(
         Entity,
         &Transform,
@@ -237,7 +262,7 @@ fn process_actions(
         if let Some(action) = queue.0.pop() {
             match action {
                 Action::MoveTo(target) => {
-                    let Ok(path) = pathfinding::calculate_path(transform.translation, target)
+                    let Ok(path) = pathfinding::calculate_path(transform.translation, target, &map)
                     else {
                         continue;
                     };
@@ -299,7 +324,6 @@ fn process_kick(
     time: Res<Time>,
     map: Res<Map>,
     mut query: Query<(&mut Transform, &mut Kicked, Entity)>,
-    interactables: Query<&Interactable>,
     mut commands: Commands,
 ) {
     const EPSILON: f32 = 0.1;
@@ -315,14 +339,14 @@ fn process_kick(
             let current_position = to_ivec2(translation);
             let next_position = to_ivec2(next_translation);
             if let Some(entities) = map.get(&next_position) {
-                for entity in entities {
-                    match interactables.get(*entity).unwrap() {
-                        Interactable::Wall => {
+                for (_, interactable) in entities {
+                    match interactable {
+                        &Interactable::Wall => {
                             let normal = get_wall_normal(current_position, &map);
                             kicked.0 = reflect_velocity(kicked.0, normal);
                             exit = true;
                         }
-                        Interactable::Person => {}
+                        &Interactable::Person => {}
                         _ => (),
                     }
                 }
