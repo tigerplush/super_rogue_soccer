@@ -1,17 +1,17 @@
 use actions::{ActionQueue, Claimed, calculate_kick_velocity};
 use bevy::{
-    color::palettes::css::{GREEN, LIGHT_CYAN, ORANGE, RED, WHITE, YELLOW},
+    color::palettes::css::{DARK_CYAN, GREEN, ORANGE, RED, WHITE, YELLOW},
     prelude::*,
-    text::cosmic_text::ttf_parser::name,
 };
 use leafwing_input_manager::prelude::*;
 use pathfinding::calculate_path;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use crate::{AppSet, GlyphAsset, entities::Interactable, states::GameplayStates, to_world};
+use crate::{entities::Interactable, states::GameplayStates, to_world, ui::LogEvent, AppSet, GlyphAsset};
 
 pub mod actions;
+pub mod enemy;
 mod names;
 mod pathfinding;
 
@@ -151,7 +151,7 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
                     index: 1,
                     layout: glyphs.atlas.clone_weak(),
                 }),
-                color: LIGHT_CYAN.into(),
+                color: DARK_CYAN.into(),
                 ..default()
             },
             Transform::from_xyz(position.0 * -8.0, position.1 * 8.0, 1.0),
@@ -245,27 +245,28 @@ struct PreviewPath {
 
 fn update_pointer(
     mut dirt: ResMut<PointerIsDirty>,
+    mut events: EventWriter<LogEvent>,
     mut query: Query<
         (&ActionState<PointerActions>, &mut Transform, &PointerObject),
         Without<CurrentPlayer>,
     >,
-    current_players: Query<&Transform, With<CurrentPlayer>>,
+    current_players: Single<(&Transform, &Name), With<CurrentPlayer>>,
     mut commands: Commands,
     mut next: ResMut<NextState<GameplayStates>>,
 ) {
+    let (start_transform, name) = current_players.into_inner();
     for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
             transform.translation += Vec3::new(input.x * 8.0, input.y * 8.0, 0.0);
-            if let Ok(start_transform) = current_players.get_single() {
                 if let Ok(path) = calculate_path(start_transform.translation, transform.translation)
                 {
                     commands.insert_resource(PreviewPath { path });
                 }
-            }
             dirt.0 = true;
         }
         if action_state.just_pressed(&PointerActions::NextTurn) {
+            events.send(LogEvent(format!("{} is passing their turn", name)));
             next.set(GameplayStates::EnemyTurn);
         }
     }

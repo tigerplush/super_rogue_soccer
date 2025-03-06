@@ -50,7 +50,7 @@ impl Plugin for SuperRogueSoccerPlugin {
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn((Camera2d, Transform::from_xyz(155.0, 0.0, 0.0)));
+    commands.spawn((Camera2d, Transform::from_xyz(172.0, -55.0, 0.0)));
 }
 
 #[derive(Resource, Asset, TypePath, Clone)]

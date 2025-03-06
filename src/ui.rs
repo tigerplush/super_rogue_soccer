@@ -4,17 +4,20 @@ use crate::{
     FontAsset, PostUpdateSet,
     actors::{PointerObject, actions::CurrentActions, is_dirty},
     entities::{Interactable, Map},
-    states::{AppState, gameplay::InfoContainer},
+    states::{
+        AppState,
+        gameplay::{InfoContainer, Log},
+    },
     to_ivec2,
 };
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
+    app.add_event::<LogEvent>().insert_resource(Logs::default()).add_systems(
         PostUpdate,
         update_ui
             .in_set(PostUpdateSet::Ui)
             .run_if(in_state(AppState::Gameplay).and(is_dirty)),
-    );
+    ).add_systems(PostUpdate, update_log.in_set(PostUpdateSet::Ui).run_if(in_state(AppState::Gameplay)));
 }
 
 fn update_ui(
@@ -61,4 +64,38 @@ fn update_ui(
                 ));
             }
         });
+}
+
+#[derive(Event)]
+pub struct LogEvent(pub String);
+
+#[derive(Resource, Default)]
+struct Logs(Vec<String>);
+
+fn update_log(
+    mut events: EventReader<LogEvent>,
+    mut logs: ResMut<Logs>,
+    font_asset: Res<FontAsset>,
+    log_ui: Query<Entity, With<Log>>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        logs.0.push(event.0.clone());
+    }
+    for ui in &log_ui {
+        commands
+            .entity(ui)
+            .despawn_descendants()
+            .with_children(|log| {
+                for entry in logs.0.iter().rev().take(10) {
+                    log.spawn((
+                        Text::new(entry),
+                        TextFont {
+                            font: font_asset.font.clone_weak(),
+                            ..default()
+                        },
+                    ));
+                }
+            });
+    }
 }

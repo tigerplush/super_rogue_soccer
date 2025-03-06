@@ -1,6 +1,15 @@
-use bevy::{prelude::*, ui::widget::NodeImageMode};
+use bevy::{
+    color::palettes::css::{DARK_CYAN, GREEN, ORANGE},
+    prelude::*,
+    ui::widget::NodeImageMode,
+};
 
-use crate::{PanelBorderAsset, actors, map, theme::prelude::*};
+use crate::{
+    PanelBorderAsset,
+    actors::{self, enemy::enemy_ai},
+    map,
+    theme::prelude::*,
+};
 
 use super::{AppState, GameplayStates};
 use crate::actors::*;
@@ -17,22 +26,55 @@ pub fn plugin(app: &mut App) {
     )
     .add_systems(
         OnEnter(GameplayStates::PlayerTurn),
-        designate_current_player,
+        (
+            designate_current_player,
+            paint_character.after(designate_current_player),
+        ),
     )
-    .add_systems(OnExit(GameplayStates::PlayerTurn), spend_player)
-    .add_systems(OnEnter(GameplayStates::EnemyTurn), designate_current_player)
-    .add_systems(OnExit(GameplayStates::EnemyTurn), spend_player);
+    .add_systems(
+        OnExit(GameplayStates::PlayerTurn),
+        (spend_player, paint_character.after(spend_player)),
+    )
+    .add_systems(
+        OnEnter(GameplayStates::EnemyTurn),
+        (
+            designate_current_player,
+            paint_character.after(designate_current_player),
+        ),
+    )
+    .add_systems(Update, enemy_ai.run_if(in_state(GameplayStates::EnemyTurn)))
+    .add_systems(
+        OnExit(GameplayStates::EnemyTurn),
+        (spend_player, paint_character.after(spend_player)),
+    );
 }
 
 #[derive(Component)]
 pub struct InfoContainer;
 
+#[derive(Component)]
+pub struct Log;
+
 fn startup(panel_border: Res<PanelBorderAsset>, mut commands: Commands) {
     commands.ui_root().with_children(|root| {
         root.spawn((
+            Name::from("Header"),
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(36.0),
+                padding: UiRect::all(Val::Percent(1.5)),
+                ..default()
+            },
+            ImageNode {
+                image: panel_border.image.clone_weak(),
+                image_mode: NodeImageMode::Sliced(panel_border.slicer.clone()),
+                ..default()
+            },
+        ));
+        root.spawn((
             Name::from("Info Container"),
             Node {
-                width: Val::Percent(25.0),
+                width: Val::Px(344.0),
                 height: Val::Percent(100.0),
                 align_self: AlignSelf::FlexEnd,
                 flex_direction: FlexDirection::Column,
@@ -45,6 +87,24 @@ fn startup(panel_border: Res<PanelBorderAsset>, mut commands: Commands) {
                 ..default()
             },
             InfoContainer,
+        ));
+        root.spawn((
+            Name::from("Footer"),
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(180.0),
+                overflow: Overflow::clip_y(),
+                overflow_clip_margin: OverflowClipMargin::content_box().with_margin(8.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Percent(1.5)),
+                ..default()
+            },
+            ImageNode {
+                image: panel_border.image.clone_weak(),
+                image_mode: NodeImageMode::Sliced(panel_border.slicer.clone()),
+                ..default()
+            },
+            Log,
         ));
     });
 }
@@ -83,6 +143,19 @@ fn designate_current_player(
         .max_by_key(|(_, stats)| stats.initiative)
     {
         commands.entity(*selected).insert(CurrentPlayer);
+    }
+}
+
+fn paint_character(mut query: Query<(&mut Sprite, &Team, Option<&CurrentPlayer>)>) {
+    for (mut sprite, team, player_option) in &mut query {
+        let color = match player_option {
+            Some(_) => GREEN,
+            None => match team {
+                Team::Player => ORANGE.into(),
+                Team::Enemy => DARK_CYAN.into(),
+            },
+        };
+        sprite.color = color.into();
     }
 }
 

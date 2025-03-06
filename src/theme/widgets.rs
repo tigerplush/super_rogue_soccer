@@ -39,7 +39,6 @@ impl Containers for Commands<'_, '_> {
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(10.0),
                 position_type: PositionType::Absolute,
                 ..default()
             },
