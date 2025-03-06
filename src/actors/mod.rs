@@ -2,11 +2,14 @@ use actions::{ActionQueue, Claimed, calculate_kick_velocity};
 use bevy::{
     color::palettes::css::{GREEN, LIGHT_CYAN, ORANGE, RED, WHITE, YELLOW},
     prelude::*,
+    text::cosmic_text::ttf_parser::name,
 };
 use leafwing_input_manager::prelude::*;
 use pathfinding::calculate_path;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
-use crate::{AppSet, GlyphAsset, entities::Interactable, to_world};
+use crate::{AppSet, GlyphAsset, entities::Interactable, states::GameplayStates, to_world};
 
 pub mod actions;
 mod names;
@@ -15,6 +18,7 @@ mod pathfinding;
 pub fn plugin(app: &mut App) {
     app.register_type::<Stats>()
         .register_type::<Velocity>()
+        .insert_resource(Sampler(ChaCha8Rng::from_os_rng()))
         .insert_resource(PointerIsDirty(true))
         .insert_gizmo_config(
             PassPreviewGizmos {},
@@ -34,11 +38,15 @@ pub fn plugin(app: &mut App) {
                     preview_path.after(update_pointer),
                     preview_pass,
                 )
+                    .run_if(in_state(GameplayStates::PlayerTurn))
                     .in_set(AppSet::Update),
             ),
         )
         .add_systems(Last, remove_dirty.run_if(is_dirty));
 }
+
+#[derive(Resource)]
+pub struct Sampler(ChaCha8Rng);
 
 #[derive(Component)]
 pub struct PointerObject {
@@ -46,7 +54,7 @@ pub struct PointerObject {
 }
 
 #[derive(Component)]
-struct CurrentPlayer;
+pub struct CurrentPlayer;
 
 #[derive(Resource)]
 pub struct PointerIsDirty(bool);
@@ -59,8 +67,8 @@ pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
     dirt.0
 }
 
-#[derive(Component)]
-enum Team {
+#[derive(Component, PartialEq)]
+pub enum Team {
     Player,
     Enemy,
 }
@@ -73,7 +81,7 @@ enum CharacterClass {
     Attacker,
 }
 
-pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
+pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut commands: Commands) {
     commands.spawn((
         Name::from("Ball"),
         Sprite {
@@ -89,77 +97,22 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     ));
 
     let positions = [
-        (
-            Name::from("Center-Forward"),
-            -4.0,
-            0.0,
-            CharacterClass::Attacker,
-        ),
-        (
-            Name::from("Goalkeeper"),
-            -45.0,
-            0.0,
-            CharacterClass::Goalkeeper,
-        ),
-        (
-            Name::from("Central-Defender Left"),
-            -30.0,
-            8.0,
-            CharacterClass::CentralDefender,
-        ),
-        (
-            Name::from("Central-Defender Right"),
-            -30.0,
-            -8.0,
-            CharacterClass::CentralDefender,
-        ),
-        (
-            Name::from("Left-Back"),
-            -30.0,
-            24.0,
-            CharacterClass::CentralDefender,
-        ),
-        (
-            Name::from("Right-Back"),
-            -30.0,
-            -24.0,
-            CharacterClass::CentralDefender,
-        ),
-        (
-            Name::from("Center-Right"),
-            -5.0,
-            16.0,
-            CharacterClass::Attacker,
-        ),
-        (
-            Name::from("Center-Left"),
-            -5.0,
-            -16.0,
-            CharacterClass::Attacker,
-        ),
-        (
-            Name::from("Midfield-Center"),
-            -18.0,
-            0.0,
-            CharacterClass::Midfielder,
-        ),
-        (
-            Name::from("Midfield-Right"),
-            -15.0,
-            12.0,
-            CharacterClass::Midfielder,
-        ),
-        (
-            Name::from("Midfield-Left"),
-            -15.0,
-            -12.0,
-            CharacterClass::Midfielder,
-        ),
+        (-4.0, 0.0, CharacterClass::Attacker),
+        (-45.0, 0.0, CharacterClass::Goalkeeper),
+        (-30.0, 8.0, CharacterClass::CentralDefender),
+        (-30.0, -8.0, CharacterClass::CentralDefender),
+        (-30.0, 24.0, CharacterClass::CentralDefender),
+        (-30.0, -24.0, CharacterClass::CentralDefender),
+        (-5.0, 16.0, CharacterClass::Attacker),
+        (-5.0, -16.0, CharacterClass::Attacker),
+        (-18.0, 0.0, CharacterClass::Midfielder),
+        (-15.0, 12.0, CharacterClass::Midfielder),
+        (-15.0, -12.0, CharacterClass::Midfielder),
     ];
 
     for (index, position) in positions.iter().enumerate() {
         let mut player = commands.spawn((
-            position.0.clone(),
+            Name::from(random_name(&mut sampler.0)),
             Sprite {
                 image: glyphs.glyph.clone_weak(),
                 texture_atlas: Some(TextureAtlas {
@@ -169,7 +122,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 color: ORANGE.into(),
                 ..default()
             },
-            Transform::from_xyz(position.1 * 8.0, position.2 * 8.0, 1.0),
+            Transform::from_xyz(position.0 * 8.0, position.1 * 8.0, 1.0),
             Interactable::Person,
             Stats {
                 ap: 8,
@@ -177,11 +130,12 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 passing_skill: 50.0,
                 wit: 1.0,
                 defense: 1.0,
+                initiative: 10,
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
             Team::Player,
-            position.3.clone(),
+            position.2.clone(),
         ));
         if index == 0 {
             player.insert(CurrentPlayer);
@@ -190,7 +144,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
 
     for (_index, position) in positions.iter().enumerate() {
         commands.spawn((
-            position.0.clone(),
+            Name::from(random_name(&mut sampler.0)),
             Sprite {
                 image: glyphs.glyph.clone_weak(),
                 texture_atlas: Some(TextureAtlas {
@@ -200,7 +154,7 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 color: LIGHT_CYAN.into(),
                 ..default()
             },
-            Transform::from_xyz(position.1 * -8.0, position.2 * 8.0, 1.0),
+            Transform::from_xyz(position.0 * -8.0, position.1 * 8.0, 1.0),
             Interactable::Person,
             Stats {
                 ap: 8,
@@ -208,11 +162,12 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
                 passing_skill: 50.0,
                 wit: 1.0,
                 defense: 1.0,
+                initiative: 10,
             },
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
             Team::Enemy,
-            position.3.clone(),
+            position.2.clone(),
         ));
     }
 
@@ -248,6 +203,27 @@ pub fn startup(glyphs: Res<GlyphAsset>, mut commands: Commands) {
     info!("done spawning");
 }
 
+fn random_name(sampler: &mut ChaCha8Rng) -> String {
+    let first_names = if sampler.random_bool(0.5) {
+        names::FIRST_NAMES
+    } else {
+        names::FIRST_NAMES_2
+    };
+
+    let first_index = sampler.random_range(0..first_names.len());
+    let first_name = first_names[first_index];
+
+    let last_names = if sampler.random_bool(0.5) {
+        names::LAST_NAMES
+    } else {
+        names::LAST_NAMES_2
+    };
+
+    let last_index = sampler.random_range(0..last_names.len());
+    let last_name = last_names[last_index];
+    format!("{} {}", first_name, last_name)
+}
+
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug)]
 enum PointerActions {
     #[actionlike(DualAxis)]
@@ -275,6 +251,7 @@ fn update_pointer(
     >,
     current_players: Query<&Transform, With<CurrentPlayer>>,
     mut commands: Commands,
+    mut next: ResMut<NextState<GameplayStates>>,
 ) {
     for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
@@ -289,7 +266,7 @@ fn update_pointer(
             dirt.0 = true;
         }
         if action_state.just_pressed(&PointerActions::NextTurn) {
-            info!("next turn");
+            next.set(GameplayStates::EnemyTurn);
         }
     }
 }
@@ -357,12 +334,13 @@ fn preview_pass(
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-struct Stats {
+pub struct Stats {
     ap: usize,
     kick_strength: f32,
     passing_skill: f32,
     wit: f32,
     defense: f32,
+    pub initiative: u8,
 }
 
 impl Stats {
@@ -373,6 +351,7 @@ impl Stats {
             passing_skill: 50.0,
             wit: 1.0,
             defense: 1.0,
+            initiative: 10,
         }
     }
 }

@@ -28,7 +28,6 @@
 - In debug, skip splashscreen
 - Tab for overlay
 - generate random flag
-- generate random player names
 - Team members walk onto field (esc to cancel)
 - Trillerpfeife for start
 - Heat
