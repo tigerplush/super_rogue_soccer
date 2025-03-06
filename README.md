@@ -24,6 +24,7 @@
 - add sound
 - Perks/Abilities
 - Random maps
+- fog of war
 - In debug, skip splashscreen
 - Tab for overlay
 - generate random flag
@@ -32,6 +33,7 @@
 - Trillerpfeife for start
 - Heat
 - Encyclopedia
+- different hit/target zones / players can loose body parts
 
 # Research
 https://www.bundesliga.com/de/faq/fussball-allgemein/torwart-abwehr-mittelfeld-angriff-welche-positionen-gibt-es-im-fussball-22370
