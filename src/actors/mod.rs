@@ -4,12 +4,16 @@ use bevy::{
     prelude::*,
 };
 use leafwing_input_manager::prelude::*;
-use pathfinding::calculate_path;
+use pathfinding::{CalculatedPath, calculate_path};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::{
-    entities::{Interactable, Map}, states::{AppState, GameplayStates}, to_world, ui::LogEvent, AppSet, GlyphAsset
+    AppSet, GlyphAsset,
+    entities::{Interactable, Map},
+    states::{AppState, GameplayStates},
+    to_world,
+    ui::LogEvent,
 };
 
 pub mod actions;
@@ -36,11 +40,10 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 tick_pointer.in_set(AppSet::TickTimers),
-                update_pointer.run_if(in_state(AppState::Gameplay)).in_set(AppSet::Update),
-                (
-                    preview_path.after(update_pointer),
-                    preview_pass,
-                )
+                update_pointer
+                    .run_if(in_state(AppState::Gameplay))
+                    .in_set(AppSet::Update),
+                (preview_path.after(update_pointer), preview_pass)
                     .run_if(in_state(GameplayStates::PlayerTurn))
                     .in_set(AppSet::Update),
             ),
@@ -70,7 +73,7 @@ pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
     dirt.0
 }
 
-#[derive(Component, Clone, Copy, PartialEq, Reflect, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Reflect, Debug, Eq, Hash)]
 pub enum Team {
     Player,
     Enemy,
@@ -231,7 +234,6 @@ fn random_name(sampler: &mut ChaCha8Rng) -> String {
 enum PointerActions {
     #[actionlike(DualAxis)]
     Move,
-    NextTurn,
 }
 
 fn tick_pointer(time: Res<Time>, mut query: Query<&mut PointerObject>) {
@@ -249,16 +251,14 @@ struct PreviewPath {
 fn update_pointer(
     map: Res<Map>,
     mut dirt: ResMut<PointerIsDirty>,
-    mut events: EventWriter<LogEvent>,
     mut query: Query<
         (&ActionState<PointerActions>, &mut Transform, &PointerObject),
         Without<CurrentPlayer>,
     >,
-    current_players: Single<(&Transform, &Name), With<CurrentPlayer>>,
+    current_players: Single<&Transform, With<CurrentPlayer>>,
     mut commands: Commands,
-    mut next: ResMut<NextState<GameplayStates>>,
 ) {
-    let (start_transform, name) = current_players.into_inner();
+    let start_transform = current_players.into_inner();
     for (action_state, mut transform, pointer) in &mut query {
         if pointer.timer.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
             let input = action_state.axis_pair(&PointerActions::Move);
@@ -270,36 +270,32 @@ fn update_pointer(
             }
             dirt.0 = true;
         }
-        if action_state.just_pressed(&PointerActions::NextTurn) {
-            events.send(LogEvent(format!("{} is passing their turn", name)));
-            next.set(GameplayStates::EnemyTurn);
-        }
     }
 }
 
 fn preview_path(
-    path: Option<Res<PreviewPath>>,
-    current_player: Option<Single<(&Stats, &Transform), With<CurrentPlayer>>>,
+    path_preview: Option<Res<PreviewPath>>,
+    current_player: Option<
+        Single<(&Stats, &Transform, Option<&CalculatedPath>), With<CurrentPlayer>>,
+    >,
     mut gizmos: Gizmos,
 ) {
-    if path.is_none() || current_player.is_none() {
+    if path_preview.is_none() || current_player.is_none() {
         return;
     }
-    let path = path.unwrap();
-    let (stats, transform) = current_player.unwrap().into_inner();
+    let (stats, transform, path_option) = current_player.unwrap().into_inner();
 
-    if !path.path.is_empty() {
-        gizmos.arrow_2d(
-            transform.translation.truncate(),
-            to_world(path.path[0]),
-            GREEN,
-        );
-    }
+    if let Some(calculated_path) = path_option {
+        for window in calculated_path.path.windows(2) {
+            gizmos.arrow_2d(to_world(window[0]), to_world(window[1]), GREEN);
+        }
+    } else {
+        let path = path_preview.unwrap();
 
-    for (index, window) in path.path.windows(2).enumerate() {
-        // we have to subtract 1 from the index here, because path doesn't start with 0
-        let color = if index < stats.ap - 1 { GREEN } else { RED };
-        gizmos.arrow_2d(to_world(window[0]), to_world(window[1]), color);
+        for (index, window) in path.path.windows(2).enumerate() {
+            let color = if index < stats.ap { GREEN } else { RED };
+            gizmos.arrow_2d(to_world(window[0]), to_world(window[1]), color);
+        }
     }
 }
 
@@ -359,6 +355,10 @@ impl Stats {
             defense: 1.0,
             initiative: 10,
         }
+    }
+
+    pub fn reset_ap(&mut self) {
+        self.ap = 10;
     }
 }
 

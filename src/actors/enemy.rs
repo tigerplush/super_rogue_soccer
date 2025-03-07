@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{actors::actions::Action, states::GameplayStates};
 
 use super::{
-    CharacterClass, CurrentPlayer,
+    CharacterClass, CurrentPlayer, Team,
     actions::{ActionQueue, Claimed},
 };
 
@@ -21,9 +21,7 @@ pub fn enemy_ai(
     } else {
         match class {
             &CharacterClass::Goalkeeper => {
-                action_queue
-                    .0
-                    .push(Action::EndTurn(GameplayStates::PlayerTurn));
+                action_queue.0.push(Action::EndTurn(Team::Player));
                 action_queue.0.push(Action::DefendGoal);
             }
             &CharacterClass::CentralDefender => {}
@@ -32,9 +30,7 @@ pub fn enemy_ai(
         }
     }
     if action_queue.0.is_empty() {
-        action_queue
-            .0
-            .push(Action::EndTurn(GameplayStates::PlayerTurn));
+        action_queue.0.push(Action::EndTurn(Team::Player));
         action_queue.0.push(Action::SkipTurn);
     }
 }

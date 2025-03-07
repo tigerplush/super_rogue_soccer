@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::actors::Team;
+
 pub mod gameplay;
 mod loading;
 mod splash;
@@ -14,12 +16,18 @@ pub enum AppState {
     Gameplay,
 }
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, SubStates)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, SubStates)]
 #[source(AppState = AppState::Gameplay)]
 pub enum GameplayStates {
-    #[default]
     PlayerTurn,
     EnemyTurn,
+    Banner(Team),
+}
+
+impl Default for GameplayStates {
+    fn default() -> Self {
+        GameplayStates::Banner(Team::Player)
+    }
 }
 
 pub fn plugin(app: &mut App) {

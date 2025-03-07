@@ -10,7 +10,7 @@ use crate::{
     ui::LogEvent,
 };
 
-use super::{PointerIsDirty, Velocity};
+use super::{PointerIsDirty, Stats, Velocity};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
@@ -19,12 +19,13 @@ pub fn plugin(app: &mut App) {
             tick_path.in_set(AppSet::TickTimers),
             follow_path.in_set(AppSet::Update),
         ),
-    );
+    )
+    .add_observer(message_move_end);
 }
 
 #[derive(Component)]
 pub struct CalculatedPath {
-    path: Vec<IVec2>,
+    pub path: Vec<IVec2>,
     timer: Timer,
     current: usize,
 }
@@ -34,7 +35,7 @@ impl CalculatedPath {
         CalculatedPath {
             path,
             timer: Timer::from_seconds(duration, TimerMode::Repeating),
-            current: 0,
+            current: 1,
         }
     }
 
@@ -90,7 +91,6 @@ pub fn calculate_path(start: Vec3, target: Vec3, map: &Map) -> Result<Vec<IVec2>
                     break;
                 }
             }
-            path.pop();
             path.reverse();
             return Ok(path);
         }
@@ -127,30 +127,43 @@ fn tick_path(time: Res<Time>, mut query: Query<&mut CalculatedPath>) {
 fn follow_path(
     mut dirt: ResMut<PointerIsDirty>,
     mut query: Query<(
-        &Name,
         &mut Transform,
         &mut CalculatedPath,
         Option<&mut Velocity>,
         Entity,
+        &mut Stats,
     )>,
-    mut events: EventWriter<LogEvent>,
     mut commands: Commands,
 ) {
-    for (name, mut transform, mut path, velocity_option, entity) in &mut query {
+    for (mut transform, mut path, velocity_option, entity, mut stats) in &mut query {
         if !path.timer.finished() {
             continue;
         }
-
-        if let Some(next) = path.next() {
-            let previous = transform.translation;
-            transform.translation = to_world(next).extend(transform.translation.z);
-            if let Some(mut velocity) = velocity_option {
-                velocity.0 += (transform.translation - previous).truncate();
+        let next_option = path.next();
+        if let Some(next) = next_option {
+            if stats.ap > 0 {
+                let previous = transform.translation;
+                transform.translation = to_world(next).extend(transform.translation.z);
+                if let Some(mut velocity) = velocity_option {
+                    velocity.0 += (transform.translation - previous).truncate();
+                }
+                stats.ap -= 1;
             }
-        } else {
+        }
+
+        if next_option.is_none() || stats.ap == 0 {
             commands.entity(entity).remove::<CalculatedPath>();
-            events.send(LogEvent(format!("{} moved", name)));
         }
         dirt.0 = true;
+    }
+}
+
+fn message_move_end(
+    trigger: Trigger<OnRemove, CalculatedPath>,
+    query: Query<&Name>,
+    mut events: EventWriter<LogEvent>,
+) {
+    if let Ok(name) = query.get(trigger.entity()) {
+        events.send(LogEvent(format!("{} stopped moving", name)));
     }
 }

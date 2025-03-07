@@ -85,7 +85,7 @@ fn calculate_ui_actions(
             actions.push(PossibleAction::StatBlock(current_entity));
         }
     }
-    let in_range = path.path.len() <= stats.ap;
+    let in_range = path.path.len() <= stats.ap + 1;
     actions.push(PossibleAction::Command(
         "f".to_string(),
         "walk".to_string(),
@@ -141,7 +141,7 @@ fn calculate_current_actions(
     let transform = pointer.into_inner();
     let target_position = to_ivec2(transform.translation);
     let (current_entity, stats, claimed_option) = current_player.into_inner();
-    let in_range = path.path.len() <= stats.ap;
+    let in_range = path.path.len() <= stats.ap + 1;
 
     slot_map.insert(Slots::Ability0, PlayerAbilities::Skip);
     if in_range {
@@ -259,7 +259,7 @@ pub enum Action {
     Pass(Entity, Vec3),
     DefendGoal,
     SkipTurn,
-    EndTurn(GameplayStates),
+    EndTurn(Team),
 }
 
 fn report_abilities_used(
@@ -296,8 +296,9 @@ fn report_abilities_used(
                         .push(Action::Pass(target, target_transform.translation));
                 }
                 PlayerAbilities::Skip => {
+                    info!("pressed skip");
+                    queue.0.push(Action::EndTurn(Team::Enemy));
                     queue.0.push(Action::SkipTurn);
-                    queue.0.push(Action::EndTurn(GameplayStates::EnemyTurn));
                 }
             }
         }
@@ -383,8 +384,9 @@ fn process_actions(
                 Action::SkipTurn => {
                     events.send(LogEvent(format!("{} is skipping their turn", name)));
                 }
-                Action::EndTurn(state) => {
-                    next.set(state);
+                Action::EndTurn(next_team) => {
+                    info!("switching state action");
+                    next.set(GameplayStates::Banner(next_team));
                 }
             }
         }
