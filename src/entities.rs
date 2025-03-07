@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::{actors::Team, to_ivec2, PostUpdateSet};
+use crate::{PostUpdateSet, actors::Team, to_ivec2};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Map>()

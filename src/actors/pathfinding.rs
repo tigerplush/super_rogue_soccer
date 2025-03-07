@@ -7,6 +7,7 @@ use crate::{
     AppSet,
     entities::{Interactable, Map},
     to_ivec2, to_world,
+    ui::LogEvent,
 };
 
 use super::{PointerIsDirty, Velocity};
@@ -126,14 +127,16 @@ fn tick_path(time: Res<Time>, mut query: Query<&mut CalculatedPath>) {
 fn follow_path(
     mut dirt: ResMut<PointerIsDirty>,
     mut query: Query<(
+        &Name,
         &mut Transform,
         &mut CalculatedPath,
         Option<&mut Velocity>,
         Entity,
     )>,
+    mut events: EventWriter<LogEvent>,
     mut commands: Commands,
 ) {
-    for (mut transform, mut path, velocity_option, entity) in &mut query {
+    for (name, mut transform, mut path, velocity_option, entity) in &mut query {
         if !path.timer.finished() {
             continue;
         }
@@ -146,6 +149,7 @@ fn follow_path(
             }
         } else {
             commands.entity(entity).remove::<CalculatedPath>();
+            events.send(LogEvent(format!("{} moved", name)));
         }
         dirt.0 = true;
     }

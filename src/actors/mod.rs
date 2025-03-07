@@ -9,11 +9,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::{
-    AppSet, GlyphAsset,
-    entities::{Interactable, Map},
-    states::GameplayStates,
-    to_world,
-    ui::LogEvent,
+    entities::{Interactable, Map}, states::{AppState, GameplayStates}, to_world, ui::LogEvent, AppSet, GlyphAsset
 };
 
 pub mod actions;
@@ -24,6 +20,7 @@ mod pathfinding;
 pub fn plugin(app: &mut App) {
     app.register_type::<Stats>()
         .register_type::<Velocity>()
+        .register_type::<CharacterClass>()
         .insert_resource(Sampler(ChaCha8Rng::from_os_rng()))
         .insert_resource(PointerIsDirty(true))
         .insert_gizmo_config(
@@ -39,8 +36,8 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 tick_pointer.in_set(AppSet::TickTimers),
+                update_pointer.run_if(in_state(AppState::Gameplay)).in_set(AppSet::Update),
                 (
-                    update_pointer,
                     preview_path.after(update_pointer),
                     preview_pass,
                 )
@@ -73,14 +70,15 @@ pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
     dirt.0
 }
 
-#[derive(Component, Clone, Copy, PartialEq, Reflect)]
+#[derive(Component, Clone, Copy, PartialEq, Reflect, Debug)]
 pub enum Team {
     Player,
     Enemy,
 }
 
-#[derive(Component, Clone)]
-enum CharacterClass {
+#[derive(Component, Clone, Reflect)]
+#[reflect(Component)]
+pub enum CharacterClass {
     Goalkeeper,
     CentralDefender,
     Midfielder,
@@ -180,8 +178,7 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
     let input_map = InputMap::default()
         .with_dual_axis(PointerActions::Move, VirtualDPad::numpad())
         .with_dual_axis(PointerActions::Move, VirtualDPad::wasd())
-        .with_dual_axis(PointerActions::Move, VirtualDPad::arrow_keys())
-        .with(PointerActions::NextTurn, KeyCode::Space);
+        .with_dual_axis(PointerActions::Move, VirtualDPad::arrow_keys());
     commands
         .spawn((
             Name::from("Pointer"),

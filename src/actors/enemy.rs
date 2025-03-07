@@ -1,18 +1,40 @@
 use bevy::prelude::*;
 
-use crate::{states::GameplayStates, ui::LogEvent};
+use crate::{actors::actions::Action, states::GameplayStates};
 
-use super::CurrentPlayer;
+use super::{
+    CharacterClass, CurrentPlayer,
+    actions::{ActionQueue, Claimed},
+};
 
 pub fn enemy_ai(
-    mut events: EventWriter<LogEvent>,
-    mut next: ResMut<NextState<GameplayStates>>,
-    query: Single<&Name, With<CurrentPlayer>>,
+    query: Single<(Option<&Claimed>, &CharacterClass, &mut ActionQueue), With<CurrentPlayer>>,
 ) {
-    info!("thinking...");
-    events.send(LogEvent(format!(
-        "{} is passing their turn",
-        query.into_inner()
-    )));
-    next.set(GameplayStates::PlayerTurn);
+    let (claim_option, class, mut action_queue) = query.into_inner();
+    if claim_option.is_some() {
+        match class {
+            &CharacterClass::Goalkeeper => {}
+            &CharacterClass::CentralDefender => {}
+            &CharacterClass::Midfielder => {}
+            &CharacterClass::Attacker => {}
+        }
+    } else {
+        match class {
+            &CharacterClass::Goalkeeper => {
+                action_queue
+                    .0
+                    .push(Action::EndTurn(GameplayStates::PlayerTurn));
+                action_queue.0.push(Action::DefendGoal);
+            }
+            &CharacterClass::CentralDefender => {}
+            &CharacterClass::Midfielder => {}
+            &CharacterClass::Attacker => {}
+        }
+    }
+    if action_queue.0.is_empty() {
+        action_queue
+            .0
+            .push(Action::EndTurn(GameplayStates::PlayerTurn));
+        action_queue.0.push(Action::SkipTurn);
+    }
 }

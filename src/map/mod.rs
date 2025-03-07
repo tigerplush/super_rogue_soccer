@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 
-use crate::{actors::Team, entities::Interactable, GlyphAsset};
+use crate::{GlyphAsset, actors::Team, entities::Interactable};
 
 mod field;
 

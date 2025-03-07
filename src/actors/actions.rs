@@ -4,11 +4,16 @@ use bevy::prelude::*;
 use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
 
 use crate::{
-    actors::Team, entities::{Interactable, Map}, states::*, to_ivec2, AppSet, PostUpdateSet
+    AppSet, PostUpdateSet,
+    actors::Team,
+    entities::{Interactable, Map},
+    states::*,
+    to_ivec2,
+    ui::LogEvent,
 };
 
 use super::{
-    CurrentPlayer, PointerObject, PreviewPath, Stats, Velocity, is_dirty,
+    CurrentPlayer, PointerObject, PreviewPath, Stats, Velocity,
     pathfinding::{self, CalculatedPath},
 };
 
@@ -16,6 +21,7 @@ pub fn plugin(app: &mut App) {
     app.register_type::<CurrentActions>()
         .register_type::<Kicked>()
         .insert_resource(CurrentActions { actions: vec![] })
+        .insert_resource(PreviewPath { path: vec![] })
         .add_plugins(InputManagerPlugin::<Slots>::default())
         .add_plugins(InputManagerPlugin::<PlayerAbilities>::default())
         .add_systems(
@@ -29,9 +35,12 @@ pub fn plugin(app: &mut App) {
         .add_systems(FixedUpdate, process_kick)
         .add_systems(
             PostUpdate,
-            calculate_current_actions
+            (
+                calculate_ui_actions,
+                calculate_current_actions.run_if(in_state(GameplayStates::PlayerTurn)),
+            )
                 .in_set(PostUpdateSet::Move)
-                .run_if(in_state(AppState::Gameplay).and(is_dirty)),
+                .run_if(in_state(AppState::Gameplay)),
         );
 }
 
@@ -48,36 +57,40 @@ pub enum PossibleAction {
     Command(String, String, bool),
 }
 
-fn calculate_current_actions(
+fn calculate_ui_actions(
     map: Res<Map>,
     path: Res<PreviewPath>,
     pointer: Single<&Transform, With<PointerObject>>,
-    ability_slot: Single<&mut AbilitySlotMap>,
     current_player: Single<(Entity, &Stats, Option<&Claimed>), With<CurrentPlayer>>,
     mut commands: Commands,
 ) {
-    let mut slot_map = ability_slot.into_inner();
-    slot_map.clear();
-
     let transform = pointer.into_inner();
     let target_position = to_ivec2(transform.translation);
     let mut actions = vec![];
     let (current_entity, stats, claimed_option) = current_player.into_inner();
-    let in_range = path.path.len() <= stats.ap;
-
+    if claimed_option.is_some() {
+        actions.push(PossibleAction::Command(
+            "j".to_string(),
+            "pass".to_string(),
+            true,
+        ));
+    }
     if let Some(entities) = map.get(&target_position) {
-        if entities.iter().map(|(e, _)| *e).collect::<Vec<Entity>>().contains(&current_entity) {
+        if entities
+            .iter()
+            .map(|(e, _)| *e)
+            .collect::<Vec<Entity>>()
+            .contains(&current_entity)
+        {
             actions.push(PossibleAction::StatBlock(current_entity));
         }
     }
+    let in_range = path.path.len() <= stats.ap;
     actions.push(PossibleAction::Command(
         "f".to_string(),
         "walk".to_string(),
         in_range,
     ));
-    if in_range {
-        slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
-    }
     if let Some(entities) = map.get(&target_position) {
         let mut sorted_vec = entities.clone();
         sorted_vec.sort_by_key(|(e, _)| if *e == current_entity { 0 } else { 1 });
@@ -90,14 +103,9 @@ fn calculate_current_actions(
                     in_range && claimed_option.is_none(),
                 ));
                 entity_actions.push(("h".to_string(), "kick".to_string(), in_range));
-                if in_range {
-                    slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
-                    slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
-                }
                 match interactable {
                     Interactable::Person => {
                         entity_actions.push(("i".to_string(), "foul".to_string(), in_range));
-                        slot_map.insert(Slots::Ability4, PlayerAbilities::Foul(entity));
                     }
                     _ => (),
                 }
@@ -111,12 +119,58 @@ fn calculate_current_actions(
             "pass".to_string(),
             true,
         ));
+    }
+    actions.push(PossibleAction::Command(
+        "SPACE".to_string(),
+        "skip".to_string(),
+        true,
+    ));
+    commands.insert_resource(CurrentActions { actions });
+}
+
+fn calculate_current_actions(
+    map: Res<Map>,
+    path: Res<PreviewPath>,
+    pointer: Single<&Transform, With<PointerObject>>,
+    ability_slot: Single<&mut AbilitySlotMap>,
+    current_player: Single<(Entity, &Stats, Option<&Claimed>), With<CurrentPlayer>>,
+) {
+    let mut slot_map = ability_slot.into_inner();
+    slot_map.clear();
+
+    let transform = pointer.into_inner();
+    let target_position = to_ivec2(transform.translation);
+    let (current_entity, stats, claimed_option) = current_player.into_inner();
+    let in_range = path.path.len() <= stats.ap;
+
+    slot_map.insert(Slots::Ability0, PlayerAbilities::Skip);
+    if in_range {
+        slot_map.insert(Slots::Ability1, PlayerAbilities::Walk);
+    }
+    if let Some(entities) = map.get(&target_position) {
+        let mut sorted_vec = entities.clone();
+        sorted_vec.sort_by_key(|(e, _)| if *e == current_entity { 0 } else { 1 });
+        for (entity, interactable) in sorted_vec {
+            if entity != current_entity {
+                if in_range {
+                    slot_map.insert(Slots::Ability2, PlayerAbilities::TakeControl(entity));
+                    slot_map.insert(Slots::Ability3, PlayerAbilities::Kick(entity));
+                }
+                match interactable {
+                    Interactable::Person => {
+                        slot_map.insert(Slots::Ability4, PlayerAbilities::Foul(entity));
+                    }
+                    _ => (),
+                }
+            }
+        }
+    }
+    if claimed_option.is_some() {
         slot_map.insert(
             Slots::Ability4,
             PlayerAbilities::Pass(claimed_option.unwrap().0),
         );
     }
-    commands.insert_resource(CurrentActions { actions });
 }
 
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug, Copy)]
@@ -126,10 +180,12 @@ pub enum PlayerAbilities {
     Kick(Entity),
     Foul(Entity),
     Pass(Entity),
+    Skip,
 }
 
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug, Copy)]
-enum Slots {
+pub enum Slots {
+    Ability0,
     Ability1,
     Ability2,
     Ability3,
@@ -141,14 +197,16 @@ enum Slots {
 impl Slots {
     fn variants() -> impl Iterator<Item = Slots> {
         use Slots::*;
-        [Ability1, Ability2, Ability3, Ability4, Ability5, Ability6]
-            .iter()
-            .copied()
+        [
+            Ability0, Ability1, Ability2, Ability3, Ability4, Ability5, Ability6,
+        ]
+        .iter()
+        .copied()
     }
 }
 
 #[derive(Component, Debug, Default, Deref, DerefMut)]
-struct AbilitySlotMap {
+pub struct AbilitySlotMap {
     map: HashMap<Slots, PlayerAbilities>,
 }
 
@@ -156,6 +214,7 @@ pub fn setup_slotmap(mut commands: Commands) {
     commands.spawn((
         Name::from("Player Controls"),
         InputMap::new([
+            (Slots::Ability0, KeyCode::Space),
             (Slots::Ability1, KeyCode::KeyF),
             (Slots::Ability2, KeyCode::KeyG),
             (Slots::Ability3, KeyCode::KeyH),
@@ -189,15 +248,18 @@ fn copy_action_state(
 }
 
 #[derive(Component, Default)]
-pub struct ActionQueue(Vec<Action>);
+pub struct ActionQueue(pub Vec<Action>);
 
-enum Action {
+pub enum Action {
     MoveTo(Vec3),
     Kick(Entity),
     TakeControl(Entity),
     Foul(Entity),
     /// Which entity has to be passed where
     Pass(Entity, Vec3),
+    DefendGoal,
+    SkipTurn,
+    EndTurn(GameplayStates),
 }
 
 fn report_abilities_used(
@@ -212,13 +274,11 @@ fn report_abilities_used(
     let target_transform = target.unwrap().into_inner();
     for ability_state in &query {
         for ability in ability_state.get_just_pressed() {
-            info!("pressed {:?}", ability);
             match ability {
                 PlayerAbilities::Walk => {
                     queue.0.push(Action::MoveTo(target_transform.translation));
                 }
                 PlayerAbilities::Kick(target) => {
-                    info!("trying to kick {}", target);
                     queue.0.push(Action::Kick(target));
                     queue.0.push(Action::MoveTo(target_transform.translation));
                 }
@@ -235,6 +295,10 @@ fn report_abilities_used(
                         .0
                         .push(Action::Pass(target, target_transform.translation));
                 }
+                PlayerAbilities::Skip => {
+                    queue.0.push(Action::SkipTurn);
+                    queue.0.push(Action::EndTurn(GameplayStates::EnemyTurn));
+                }
             }
         }
     }
@@ -245,15 +309,20 @@ fn process_actions(
     map: Res<Map>,
     mut query: Query<(
         Entity,
+        &Name,
         &Transform,
         &mut ActionQueue,
         &Stats,
         &Velocity,
         Option<&CalculatedPath>,
+        &Team,
     )>,
+    goals: Query<(&Transform, &Interactable)>,
+    mut events: EventWriter<LogEvent>,
+    mut next: ResMut<NextState<GameplayStates>>,
     mut commands: Commands,
 ) {
-    for (entity, transform, mut queue, stats, velocity, path_option) in &mut query {
+    for (entity, name, transform, mut queue, stats, velocity, path_option, team) in &mut query {
         if path_option.is_some() {
             continue;
         }
@@ -267,17 +336,13 @@ fn process_actions(
                     };
                     commands
                         .entity(entity)
-                        .insert((Velocity(Vec2::ZERO), CalculatedPath::new(path, 0.5)));
+                        .insert((Velocity(Vec2::ZERO), CalculatedPath::new(path, 0.25)));
                 }
                 Action::Kick(target) => {
                     commands
                         .entity(target)
                         .insert(Kicked(velocity.0 * stats.kick_strength));
-                    info!(
-                        "kicking, {} should now have {} velocity",
-                        target,
-                        velocity.0 * stats.kick_strength
-                    );
+                    events.send(LogEvent(format!("{} kicked", name)));
                 }
                 Action::TakeControl(target) => {
                     commands.entity(entity).insert(Claimed(target));
@@ -297,6 +362,29 @@ fn process_actions(
                         .insert(Kicked(velocity))
                         .remove::<ClaimedBy>();
                     commands.entity(entity).remove::<Claimed>();
+                    events.send(LogEvent(format!("{} is passing the ball", name)));
+                }
+                Action::DefendGoal => {
+                    let (sum, count) = goals
+                        .iter()
+                        .filter(|(_, interactable)| *interactable == &Interactable::Goal(*team))
+                        .map(|(transform, _)| transform.translation)
+                        .fold((Vec3::ZERO, 0), |(acc, count), v| (acc + v, count + 1));
+
+                    let average = sum / count as f32;
+                    let ball = goals
+                        .iter()
+                        .filter(|(_, interactable)| *interactable == &Interactable::Ball)
+                        .map(|(transform, _)| transform.translation)
+                        .next()
+                        .unwrap();
+                    queue.0.push(Action::MoveTo(Vec3::ZERO));
+                }
+                Action::SkipTurn => {
+                    events.send(LogEvent(format!("{} is skipping their turn", name)));
+                }
+                Action::EndTurn(state) => {
+                    next.set(state);
                 }
             }
         }
@@ -348,7 +436,7 @@ fn process_kick(
                         &Interactable::Person => {}
                         &Interactable::Goal(team) => {
                             let normal = get_wall_normal(current_position, &map);
-                            let is_goal= match team {
+                            let is_goal = match team {
                                 Team::Enemy => normal.x < 0.0,
                                 Team::Player => normal.x > 0.0,
                             };
@@ -356,8 +444,7 @@ fn process_kick(
                                 // count goal
                                 // reset ball?
                                 Vec2::ZERO
-                            }
-                            else {
+                            } else {
                                 reflect_velocity(kicked.0, normal)
                             };
                             exit = true;

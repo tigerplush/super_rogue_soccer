@@ -6,7 +6,7 @@ use bevy::{
 
 use crate::{
     AppSet, FontAsset, PanelBorderAsset,
-    actors::{self, enemy::enemy_ai},
+    actors::{self, actions::AbilitySlotMap, enemy::enemy_ai},
     map,
     theme::prelude::*,
 };
@@ -39,10 +39,11 @@ pub fn plugin(app: &mut App) {
         OnEnter(GameplayStates::EnemyTurn),
         (
             designate_current_player,
-            (show_banner, paint_character).after(designate_current_player),
+            remove_actions,
+            (show_banner, paint_character, enemy_ai).after(designate_current_player),
         ),
     )
-    .add_systems(Update, enemy_ai.run_if(in_state(GameplayStates::EnemyTurn)))
+    // .add_systems(Update, enemy_ai.run_if(in_state(GameplayStates::EnemyTurn)))
     .add_systems(
         OnExit(GameplayStates::EnemyTurn),
         (spend_player, paint_character.after(spend_player)),
@@ -145,6 +146,10 @@ fn designate_current_player(
     {
         commands.entity(*selected).insert(CurrentPlayer);
     }
+}
+
+fn remove_actions(mut ability_slot: Single<&mut AbilitySlotMap>) {
+    ability_slot.clear();
 }
 
 fn paint_character(mut query: Query<(&mut Sprite, &Team, Option<&CurrentPlayer>)>) {
