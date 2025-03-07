@@ -73,7 +73,7 @@ pub fn is_dirty(dirt: Res<PointerIsDirty>) -> bool {
     dirt.0
 }
 
-#[derive(Component, PartialEq)]
+#[derive(Component, Clone, Copy, PartialEq, Reflect)]
 pub enum Team {
     Player,
     Enemy,

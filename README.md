@@ -13,7 +13,7 @@
 
 ## ToDo
 - add counting goals
-- add enemies and AI
+- add AI
 - bug in preview (show from current player or don't show at all)
 - All actions cost ap
 - add sound
@@ -32,3 +32,4 @@
 # Research
 https://www.bundesliga.com/de/faq/fussball-allgemein/torwart-abwehr-mittelfeld-angriff-welche-positionen-gibt-es-im-fussball-22370
 https://www.bundesliga.com/de/faq/fussball-allgemein/fussball-aufstellung-erklaerung-und-bezeichnungen-22361
+https://jobsinfootball.com/blog/soccer-positions/

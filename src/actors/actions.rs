@@ -4,10 +4,7 @@ use bevy::prelude::*;
 use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
 
 use crate::{
-    AppSet, PostUpdateSet,
-    entities::{Interactable, Map},
-    states::*,
-    to_ivec2,
+    actors::Team, entities::{Interactable, Map}, states::*, to_ivec2, AppSet, PostUpdateSet
 };
 
 use super::{
@@ -349,6 +346,22 @@ fn process_kick(
                             exit = true;
                         }
                         &Interactable::Person => {}
+                        &Interactable::Goal(team) => {
+                            let normal = get_wall_normal(current_position, &map);
+                            let is_goal= match team {
+                                Team::Enemy => normal.x < 0.0,
+                                Team::Player => normal.x > 0.0,
+                            };
+                            kicked.0 = if is_goal {
+                                // count goal
+                                // reset ball?
+                                Vec2::ZERO
+                            }
+                            else {
+                                reflect_velocity(kicked.0, normal)
+                            };
+                            exit = true;
+                        }
                         _ => (),
                     }
                 }

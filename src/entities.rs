@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::{PostUpdateSet, to_ivec2};
+use crate::{actors::Team, to_ivec2, PostUpdateSet};
 
 pub fn plugin(app: &mut App) {
     app.register_type::<Map>()
@@ -16,7 +16,7 @@ pub enum Interactable {
     Ball,
     Person,
     Wall,
-    Goal,
+    Goal(Team),
 }
 
 #[derive(Resource, Default, Deref, DerefMut, Reflect)]

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 
-use crate::{GlyphAsset, entities::Interactable};
+use crate::{actors::Team, entities::Interactable, GlyphAsset};
 
 mod field;
 
@@ -42,7 +42,15 @@ pub fn spawn_field(glyph: Res<GlyphAsset>, mut commands: Commands) {
                 '|' => {
                     vec.push((
                         Vec3::new(x as f32 * 8.0, y as f32 * 8.0, 0.0),
-                        Interactable::Goal,
+                        Interactable::Goal(Team::Player),
+                        Name::from(format!("Goal {x},{y}")),
+                    ));
+                    TileTextureIndex(GOAL_NET)
+                }
+                'x' => {
+                    vec.push((
+                        Vec3::new(x as f32 * 8.0, y as f32 * 8.0, 0.0),
+                        Interactable::Goal(Team::Enemy),
                         Name::from(format!("Goal {x},{y}")),
                     ));
                     TileTextureIndex(GOAL_NET)
