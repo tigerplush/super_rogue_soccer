@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{actors::actions::Action, states::GameplayStates};
+use crate::actors::actions::Action;
 
 use super::{
     CharacterClass, CurrentPlayer, Team,

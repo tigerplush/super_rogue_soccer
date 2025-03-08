@@ -20,7 +20,8 @@ pub fn plugin(app: &mut App) {
             follow_path.in_set(AppSet::Update),
         ),
     )
-    .add_observer(message_move_end);
+    // .add_observer(message_move_end)
+    ;
 }
 
 #[derive(Component)]
@@ -158,6 +159,7 @@ fn follow_path(
     }
 }
 
+#[allow(dead_code)]
 fn message_move_end(
     trigger: Trigger<OnRemove, CalculatedPath>,
     query: Query<&Name>,

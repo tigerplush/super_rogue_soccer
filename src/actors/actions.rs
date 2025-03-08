@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
+use rand::Rng;
 
 use crate::{
     AppSet, PostUpdateSet,
@@ -13,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    CurrentPlayer, PointerObject, PreviewPath, Stats, Velocity,
+    CurrentPlayer, PointerObject, PreviewPath, Sampler, Stats, Velocity,
     pathfinding::{self, CalculatedPath},
 };
 
@@ -53,7 +54,8 @@ pub struct CurrentActions {
 #[derive(Reflect)]
 pub enum PossibleAction {
     StatBlock(Entity),
-    EntityCommands(Entity, Vec<(String, String, bool)>),
+    Header(Entity),
+    EntityCommands(Vec<(String, String, bool)>),
     Command(String, String, bool),
 }
 
@@ -97,6 +99,12 @@ fn calculate_ui_actions(
         for (entity, interactable) in sorted_vec {
             if entity != current_entity {
                 let mut entity_actions = vec![];
+                if Interactable::Person == interactable {
+                    actions.push(PossibleAction::StatBlock(entity));
+                }
+                else {
+                    actions.push(PossibleAction::Header(entity));
+                }
                 entity_actions.push((
                     "g".to_string(),
                     "take control".to_string(),
@@ -109,7 +117,7 @@ fn calculate_ui_actions(
                     }
                     _ => (),
                 }
-                actions.push(PossibleAction::EntityCommands(entity, entity_actions));
+                actions.push(PossibleAction::EntityCommands(entity_actions));
             }
         }
     }
@@ -318,7 +326,7 @@ fn process_actions(
         Option<&CalculatedPath>,
         &Team,
     )>,
-    goals: Query<(&Transform, &Interactable)>,
+    interactables: Query<(&Transform, &Interactable, &Name)>,
     mut events: EventWriter<LogEvent>,
     mut next: ResMut<NextState<GameplayStates>>,
     mut commands: Commands,
@@ -340,14 +348,33 @@ fn process_actions(
                         .insert((Velocity(Vec2::ZERO), CalculatedPath::new(path, 0.25)));
                 }
                 Action::Kick(target) => {
+                    let (_, interactable, target_name) = interactables.get(target).unwrap();
+                    let article = if &Interactable::Ball == interactable {
+                        "the "
+                    } else {
+                        ""
+                    };
                     commands
                         .entity(target)
                         .insert(Kicked(velocity.0 * stats.kick_strength));
-                    events.send(LogEvent(format!("{} kicked", name)));
+                    events.send(LogEvent(format!(
+                        "{} kicked {}{}",
+                        name, article, target_name
+                    )));
                 }
                 Action::TakeControl(target) => {
                     commands.entity(entity).insert(Claimed(target));
                     commands.entity(target).insert(ClaimedBy(entity));
+                    let (_, interactable, target_name) = interactables.get(target).unwrap();
+                    let article = if &Interactable::Ball == interactable {
+                        "the "
+                    } else {
+                        ""
+                    };
+                    events.send(LogEvent(format!(
+                        "{} takes control of {}{}",
+                        name, article, target_name
+                    )));
                 }
                 Action::Foul(target) => {}
                 Action::Pass(target, target_position) => {
@@ -366,26 +393,30 @@ fn process_actions(
                     events.send(LogEvent(format!("{} is passing the ball", name)));
                 }
                 Action::DefendGoal => {
-                    let (sum, count) = goals
+                    let (sum, count) = interactables
                         .iter()
-                        .filter(|(_, interactable)| *interactable == &Interactable::Goal(*team))
-                        .map(|(transform, _)| transform.translation)
+                        .filter(|(_, interactable, _)| *interactable == &Interactable::Goal(*team))
+                        .map(|(transform, _, _)| transform.translation)
                         .fold((Vec3::ZERO, 0), |(acc, count), v| (acc + v, count + 1));
 
-                    let average = sum / count as f32;
-                    let ball = goals
+                    let midpoint = sum / count as f32;
+                    let ball = interactables
                         .iter()
-                        .filter(|(_, interactable)| *interactable == &Interactable::Ball)
-                        .map(|(transform, _)| transform.translation)
+                        .filter(|(_, interactable, _)| *interactable == &Interactable::Ball)
+                        .map(|(transform, _, _)| transform.translation)
                         .next()
                         .unwrap();
-                    queue.0.push(Action::MoveTo(Vec3::ZERO));
+                    let direction = (ball - midpoint).normalize_or_zero();
+                    // radius of goal is 7 tiles times 8.0 pixel per tiles
+                    const RADIUS: f32 = 7.0 * 8.0;
+
+                    queue.0.push(Action::MoveTo(midpoint + direction * RADIUS));
+                    events.send(LogEvent(format!("{} moves to defend the goal", name)));
                 }
                 Action::SkipTurn => {
                     events.send(LogEvent(format!("{} is skipping their turn", name)));
                 }
                 Action::EndTurn(next_team) => {
-                    info!("switching state action");
                     next.set(GameplayStates::Banner(next_team));
                 }
             }
@@ -410,13 +441,22 @@ pub fn calculate_kick_velocity(
 }
 
 fn process_kick(
+    mut sampler: ResMut<Sampler>,
     time: Res<Time>,
     map: Res<Map>,
-    mut query: Query<(&mut Transform, &mut Kicked, Entity)>,
+    current_player: Option<Single<Entity, With<CurrentPlayer>>>,
+    mut query: Query<(&Name, &mut Transform, &mut Kicked, Entity)>,
+    interactables: Query<(&Name, &Stats), With<Interactable>>,
     mut commands: Commands,
+    mut events: EventWriter<LogEvent>,
 ) {
     const EPSILON: f32 = 0.1;
-    for (mut transform, mut kicked, entity) in &mut query {
+    let current_entity = if let Some(current) = current_player {
+        current.into_inner()
+    } else {
+        Entity::PLACEHOLDER
+    };
+    for (name, mut transform, mut kicked, entity) in &mut query {
         let mut translation = transform.translation;
         let total_movement = kicked.0 * time.delta_secs();
         let steps = total_movement.length().ceil() as i32;
@@ -428,14 +468,28 @@ fn process_kick(
             let current_position = to_ivec2(translation);
             let next_position = to_ivec2(next_translation);
             if let Some(entities) = map.get(&next_position) {
-                for (_, interactable) in entities {
+                for (next_entity, interactable) in entities {
+                    if *next_entity == current_entity {
+                        continue;
+                    }
                     match interactable {
                         &Interactable::Wall => {
                             let normal = get_wall_normal(current_position, &map);
                             kicked.0 = reflect_velocity(kicked.0, normal);
                             exit = true;
                         }
-                        &Interactable::Person => {}
+                        &Interactable::Person => {
+                            let (player, stats) = interactables.get(*next_entity).unwrap();
+                            let random = sampler.0.random_range(0.0..=1.0);
+                            if random < stats.defense {
+                                kicked.0 = Vec2::ZERO;
+                                exit = true;
+                                events.send(LogEvent(format!(
+                                    "{} blocked incoming {}",
+                                    player, name
+                                )));
+                            }
+                        }
                         &Interactable::Goal(team) => {
                             let normal = get_wall_normal(current_position, &map);
                             let is_goal = match team {

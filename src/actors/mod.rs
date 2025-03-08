@@ -104,17 +104,17 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
     ));
 
     let positions = [
-        (-4.0, 0.0, CharacterClass::Attacker),
         (-45.0, 0.0, CharacterClass::Goalkeeper),
         (-30.0, 8.0, CharacterClass::CentralDefender),
         (-30.0, -8.0, CharacterClass::CentralDefender),
         (-30.0, 24.0, CharacterClass::CentralDefender),
         (-30.0, -24.0, CharacterClass::CentralDefender),
-        (-5.0, 16.0, CharacterClass::Attacker),
-        (-5.0, -16.0, CharacterClass::Attacker),
         (-18.0, 0.0, CharacterClass::Midfielder),
         (-15.0, 12.0, CharacterClass::Midfielder),
         (-15.0, -12.0, CharacterClass::Midfielder),
+        (-5.0, 16.0, CharacterClass::Attacker),
+        (-5.0, -16.0, CharacterClass::Attacker),
+        (-4.0, 0.0, CharacterClass::Attacker),
     ];
 
     for (index, position) in positions.iter().enumerate() {
@@ -131,25 +131,15 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
             },
             Transform::from_xyz(position.0 * 8.0, position.1 * 8.0, 1.0),
             Interactable::Person,
-            Stats {
-                ap: 8,
-                kick_strength: 15.0,
-                passing_skill: 50.0,
-                wit: 1.0,
-                defense: 1.0,
-                initiative: 10,
-            },
+            Stats::from_class(&position.2, index, &mut sampler.0),
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
             Team::Player,
             position.2.clone(),
         ));
-        if index == 0 {
-            player.insert(CurrentPlayer);
-        }
     }
 
-    for (_index, position) in positions.iter().enumerate() {
+    for (index, position) in positions.iter().enumerate() {
         commands.spawn((
             Name::from(random_name(&mut sampler.0)),
             Sprite {
@@ -163,14 +153,7 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
             },
             Transform::from_xyz(position.0 * -8.0, position.1 * 8.0, 1.0),
             Interactable::Person,
-            Stats {
-                ap: 8,
-                kick_strength: 15.0,
-                passing_skill: 50.0,
-                wit: 1.0,
-                defense: 1.0,
-                initiative: 10,
-            },
+            Stats::from_class(&position.2, index, &mut sampler.0),
             ActionQueue::default(),
             Velocity(Vec2::ZERO),
             Team::Enemy,
@@ -275,15 +258,13 @@ fn update_pointer(
 
 fn preview_path(
     path_preview: Option<Res<PreviewPath>>,
-    current_player: Option<
-        Single<(&Stats, &Transform, Option<&CalculatedPath>), With<CurrentPlayer>>,
-    >,
+    current_player: Option<Single<(&Stats, Option<&CalculatedPath>), With<CurrentPlayer>>>,
     mut gizmos: Gizmos,
 ) {
     if path_preview.is_none() || current_player.is_none() {
         return;
     }
-    let (stats, transform, path_option) = current_player.unwrap().into_inner();
+    let (stats, path_option) = current_player.unwrap().into_inner();
 
     if let Some(calculated_path) = path_option {
         for window in calculated_path.path.windows(2) {
@@ -334,7 +315,7 @@ fn preview_pass(
     gizmos.line_2d(transform.translation.truncate(), end_point, WHITE);
 }
 
-#[derive(Component, Reflect)]
+#[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
 pub struct Stats {
     ap: usize,
@@ -346,14 +327,30 @@ pub struct Stats {
 }
 
 impl Stats {
-    fn from_class() -> Self {
+    fn from_class(class: &CharacterClass, position: usize, sampler: &mut ChaCha8Rng) -> Self {
+        let (ap, kick_strength, passing_skill) = (8, 15.0, 50.0);
+        let weights = match class {
+            CharacterClass::Goalkeeper => [0.5, 1.0, 1.5, 1.0, 2.0],
+            CharacterClass::CentralDefender => [1.0, 1.0, 1.5, 0.5, 2.0],
+            CharacterClass::Midfielder => [1.5, 1.0, 2.0, 0.5, 1.0],
+            CharacterClass::Attacker => [1.5, 1.0, 1.0, 2.0, 0.5],
+        };
+
+        let random_values: [f32; 5] = sampler.random();
+        let mut normalized = [0.0, 0.0, 0.0, 0.0, 0.0];
+        for index in 0..5 {
+            normalized[index] = random_values[index] * weights[index];
+        }
+        let sum: f32 = normalized.iter().sum();
+        normalized = normalized.map(|element| element / sum);
+
         Stats {
-            ap: 10,
-            kick_strength: 15.0,
-            passing_skill: 50.0,
-            wit: 1.0,
-            defense: 1.0,
-            initiative: 10,
+            ap: ap + (normalized[0] * 4.0) as usize,
+            kick_strength: kick_strength + normalized[1] * 10.0,
+            passing_skill: passing_skill + normalized[2] * 30.0,
+            wit: normalized[3],
+            defense: normalized[4],
+            initiative: position as u8,
         }
     }
 
@@ -366,8 +363,12 @@ impl std::fmt::Display for Stats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "AP: {} | KICK STRENGTH: {}\nPASSING SKILL: {} | WIT {}\nDEFENSE: {}",
-            self.ap, self.kick_strength, self.passing_skill, self.wit, self.defense
+            "AP: {} | KICK STRENGTH: {:.0}\nPASSING SKILL: {:.0} | WIT {:.2}%\nDEFENSE: {:.2}%",
+            self.ap,
+            self.kick_strength,
+            self.passing_skill,
+            self.wit * 100.0,
+            self.defense * 100.0
         )
     }
 }

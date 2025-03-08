@@ -44,7 +44,6 @@ pub fn plugin(app: &mut App) {
         ),
     )
     .add_systems(OnEnter(GameplayStates::EnemyTurn), enemy_ai)
-    // .add_systems(Update, enemy_ai.run_if(in_state(GameplayStates::EnemyTurn)))
     .add_systems(
         OnExit(GameplayStates::EnemyTurn),
         (spend_player, paint_character.after(spend_player)),
@@ -125,10 +124,9 @@ fn designate_current_player(
     mut query: Query<(Entity, &Team, &mut Stats, Option<&HasActed>)>,
     mut commands: Commands,
 ) {
-    info!("designating player");
     let current = match current_team.get() {
         GameplayStates::Banner(team) => team,
-        _ => panic!("aaaah"),
+        _ => panic!("designate_current_player can only be called in GameplayStates::Banner(...)"),
     };
 
     let mut available_players: Vec<(Entity, &Stats)> = query
@@ -136,7 +134,6 @@ fn designate_current_player(
         .filter(|(_, team, _, acted_option)| *team == current && acted_option.is_none())
         .map(|(entity, _, stats, _)| (entity, stats))
         .collect();
-
     if available_players.is_empty() {
         for (entity, _, mut stats, _) in &mut query {
             stats.reset_ap();
@@ -188,7 +185,6 @@ fn show_banner(
     query: Single<(&Name, &Team), With<CurrentPlayer>>,
     mut commands: Commands,
 ) {
-    info!("showing banner");
     commands
         .ui_root()
         .insert((ZIndex(1), ImageNodeFadeInOut::default().with_t(0.6)))
@@ -261,14 +257,13 @@ fn remove_banner(
 ) {
     for (entity, fade) in &fades {
         if fade.elapsed() {
-            info!("switching state");
             commands.entity(entity).despawn_recursive();
             let next_state = match state.get() {
                 GameplayStates::Banner(team) => match team {
                     &Team::Player => GameplayStates::PlayerTurn,
                     &Team::Enemy => GameplayStates::EnemyTurn,
                 },
-                _ => panic!("aaaaah"),
+                _ => panic!("remove_banner can only be called in GameplayStates::Banner(...)"),
             };
             next.set(next_state);
         }

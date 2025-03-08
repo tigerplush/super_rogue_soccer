@@ -65,7 +65,7 @@ fn update_ui(
                             ));
                         }
                     }
-                    PossibleAction::EntityCommands(target, commands) => {
+                    PossibleAction::Header(target) => {
                         let target = interactables.get(*target).unwrap();
                         info.spawn((
                             Text::from(target.to_string()),
@@ -74,6 +74,8 @@ fn update_ui(
                                 ..default()
                             },
                         ));
+                    }
+                    PossibleAction::EntityCommands(commands) => {
                         for (key, command, available) in commands {
                             let color = if *available {
                                 Color::WHITE
