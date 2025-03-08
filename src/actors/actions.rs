@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
+use bevy_ecs_tilemap::helpers::transform;
 use leafwing_input_manager::{plugin::InputManagerSystem, prelude::*};
 use rand::Rng;
 
@@ -101,8 +102,7 @@ fn calculate_ui_actions(
                 let mut entity_actions = vec![];
                 if Interactable::Person == interactable {
                     actions.push(PossibleAction::StatBlock(entity));
-                }
-                else {
+                } else {
                     actions.push(PossibleAction::Header(entity));
                 }
                 entity_actions.push((
@@ -255,9 +255,11 @@ fn copy_action_state(
     }
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Reflect)]
+#[reflect(Component)]
 pub struct ActionQueue(pub Vec<Action>);
 
+#[derive(Reflect)]
 pub enum Action {
     MoveTo(Vec3),
     Kick(Entity),
@@ -268,6 +270,8 @@ pub enum Action {
     DefendGoal,
     SkipTurn,
     EndTurn(Team),
+    Advance,
+    PassDown,
 }
 
 fn report_abilities_used(
@@ -304,7 +308,6 @@ fn report_abilities_used(
                         .push(Action::Pass(target, target_transform.translation));
                 }
                 PlayerAbilities::Skip => {
-                    info!("pressed skip");
                     queue.0.push(Action::EndTurn(Team::Enemy));
                     queue.0.push(Action::SkipTurn);
                 }
@@ -314,6 +317,7 @@ fn report_abilities_used(
 }
 
 fn process_actions(
+    mut sampler: ResMut<Sampler>,
     time: Res<Time<Fixed>>,
     map: Res<Map>,
     mut query: Query<(
@@ -321,17 +325,17 @@ fn process_actions(
         &Name,
         &Transform,
         &mut ActionQueue,
-        &Stats,
         &Velocity,
         Option<&CalculatedPath>,
         &Team,
     )>,
-    interactables: Query<(&Transform, &Interactable, &Name)>,
+    interactables: Query<(Entity, &Transform, &Interactable, &Name)>,
+    stat_query: Query<&Stats>,
     mut events: EventWriter<LogEvent>,
     mut next: ResMut<NextState<GameplayStates>>,
     mut commands: Commands,
 ) {
-    for (entity, name, transform, mut queue, stats, velocity, path_option, team) in &mut query {
+    for (entity, name, transform, mut queue, velocity, path_option, team) in &mut query {
         if path_option.is_some() {
             continue;
         }
@@ -341,6 +345,7 @@ fn process_actions(
                 Action::MoveTo(target) => {
                     let Ok(path) = pathfinding::calculate_path(transform.translation, target, &map)
                     else {
+                        events.send(LogEvent(format!("{} can't find a way to the target", name)));
                         continue;
                     };
                     commands
@@ -348,12 +353,24 @@ fn process_actions(
                         .insert((Velocity(Vec2::ZERO), CalculatedPath::new(path, 0.25)));
                 }
                 Action::Kick(target) => {
-                    let (_, interactable, target_name) = interactables.get(target).unwrap();
-                    let article = if &Interactable::Ball == interactable {
-                        "the "
-                    } else {
-                        ""
+                    let (_, _, interactable, target_name) = interactables.get(target).unwrap();
+                    let article = match interactable {
+                        Interactable::Ball => "the",
+                        Interactable::Person => {
+                            let stat = stat_query.get(target).unwrap();
+                            let random = sampler.0.random_range(0.0..=1.0);
+                            if random < stat.defense {
+                                events.send(LogEvent(format!(
+                                    "{} tried to kicked {}, but {} evaded",
+                                    name, target_name, target_name
+                                )));
+                                continue;
+                            }
+                            ""
+                        }
+                        _ => "",
                     };
+                    let stats = stat_query.get(entity).unwrap();
                     commands
                         .entity(target)
                         .insert(Kicked(velocity.0 * stats.kick_strength));
@@ -365,7 +382,7 @@ fn process_actions(
                 Action::TakeControl(target) => {
                     commands.entity(entity).insert(Claimed(target));
                     commands.entity(target).insert(ClaimedBy(entity));
-                    let (_, interactable, target_name) = interactables.get(target).unwrap();
+                    let (_, _, interactable, target_name) = interactables.get(target).unwrap();
                     let article = if &Interactable::Ball == interactable {
                         "the "
                     } else {
@@ -378,6 +395,7 @@ fn process_actions(
                 }
                 Action::Foul(target) => {}
                 Action::Pass(target, target_position) => {
+                    let stats = stat_query.get(entity).unwrap();
                     let velocity = calculate_kick_velocity(
                         stats.passing_skill,
                         transform.translation.truncate(),
@@ -395,15 +413,17 @@ fn process_actions(
                 Action::DefendGoal => {
                     let (sum, count) = interactables
                         .iter()
-                        .filter(|(_, interactable, _)| *interactable == &Interactable::Goal(*team))
-                        .map(|(transform, _, _)| transform.translation)
+                        .filter(|(_, _, interactable, _)| {
+                            *interactable == &Interactable::Goal(*team)
+                        })
+                        .map(|(_, transform, _, _)| transform.translation)
                         .fold((Vec3::ZERO, 0), |(acc, count), v| (acc + v, count + 1));
 
                     let midpoint = sum / count as f32;
                     let ball = interactables
                         .iter()
-                        .filter(|(_, interactable, _)| *interactable == &Interactable::Ball)
-                        .map(|(transform, _, _)| transform.translation)
+                        .filter(|(_, _, interactable, _)| *interactable == &Interactable::Ball)
+                        .map(|(_, transform, _, _)| transform.translation)
                         .next()
                         .unwrap();
                     let direction = (ball - midpoint).normalize_or_zero();
@@ -418,6 +438,49 @@ fn process_actions(
                 }
                 Action::EndTurn(next_team) => {
                     next.set(GameplayStates::Banner(next_team));
+                }
+                Action::Advance => {
+                    let closest = interactables
+                        .iter()
+                        .filter(|(_, _, interactable, _)| {
+                            *interactable == &Interactable::Goal(Team::Player)
+                        })
+                        .map(|(_, transform, _, _)| transform)
+                        .min_by(|a, b| {
+                            let dist_a = (a.translation - transform.translation).length();
+                            let dist_b = (b.translation - transform.translation).length();
+                            dist_a
+                                .partial_cmp(&dist_b)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                        .unwrap();
+                    info!("trying to advance to {}", closest.translation);
+                    queue
+                        .0
+                        .push(Action::MoveTo(closest.translation + Vec3::X * 8.0));
+                }
+                Action::PassDown => {
+                    let closest = interactables
+                        .iter()
+                        .filter(|(_, _, interactable, _)| {
+                            *interactable == &Interactable::Goal(Team::Enemy)
+                        })
+                        .map(|(_, transform, _, _)| transform)
+                        .min_by(|a, b| {
+                            let dist_a = (a.translation - transform.translation).length();
+                            let dist_b = (b.translation - transform.translation).length();
+                            dist_a
+                                .partial_cmp(&dist_b)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                        .unwrap();
+                    let target = interactables
+                        .iter()
+                        .filter(|(_, _, interactable, _)| *interactable == &Interactable::Ball)
+                        .map(|(entity, _, _, _)| entity)
+                        .next()
+                        .unwrap();
+                    queue.0.push(Action::Pass(target, closest.translation));
                 }
             }
         }
@@ -469,7 +532,7 @@ fn process_kick(
             let next_position = to_ivec2(next_translation);
             if let Some(entities) = map.get(&next_position) {
                 for (next_entity, interactable) in entities {
-                    if *next_entity == current_entity {
+                    if *next_entity == current_entity && *next_entity == entity {
                         continue;
                     }
                     match interactable {
@@ -550,7 +613,7 @@ fn get_wall_normal(position: IVec2, map: &Map) -> Vec2 {
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-struct ClaimedBy(Entity);
+pub struct ClaimedBy(pub Entity);
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]

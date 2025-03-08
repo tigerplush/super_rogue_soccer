@@ -7,10 +7,12 @@ use crate::{
     AppSet,
     entities::{Interactable, Map},
     to_ivec2, to_world,
-    ui::LogEvent,
 };
 
-use super::{PointerIsDirty, Stats, Velocity};
+use super::{
+    PointerIsDirty, Stats, Team, Velocity,
+    actions::{Action, ActionQueue},
+};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
@@ -20,8 +22,7 @@ pub fn plugin(app: &mut App) {
             follow_path.in_set(AppSet::Update),
         ),
     )
-    // .add_observer(message_move_end)
-    ;
+    .add_observer(on_move_end);
 }
 
 #[derive(Component)]
@@ -100,11 +101,23 @@ pub fn calculate_path(start: Vec3, target: Vec3, map: &Map) -> Result<Vec<IVec2>
             let neighbor = current_coordinates + direction;
             let mut cost = 1;
             if let Some(next) = map.get(&neighbor) {
+                let mut passable = true;
                 for (_, interactable) in next {
                     cost += match interactable {
                         &Interactable::Person => 10,
+                        &Interactable::Goal(_) => {
+                            passable = false;
+                            100
+                        }
+                        &Interactable::Wall => {
+                            passable = false;
+                            100
+                        }
                         _ => 0,
                     };
+                }
+                if !passable {
+                    continue;
                 }
             }
             let new_cost = cost_so_far.get(&current_coordinates).unwrap() + cost;
@@ -159,13 +172,18 @@ fn follow_path(
     }
 }
 
-#[allow(dead_code)]
-fn message_move_end(
+fn on_move_end(
     trigger: Trigger<OnRemove, CalculatedPath>,
-    query: Query<&Name>,
-    mut events: EventWriter<LogEvent>,
+    mut query: Query<(&Stats, &mut ActionQueue, &Team)>,
 ) {
-    if let Ok(name) = query.get(trigger.entity()) {
-        events.send(LogEvent(format!("{} stopped moving", name)));
+    if let Ok((stats, mut queue, team)) = query.get_mut(trigger.entity()) {
+        let next = match team {
+            Team::Enemy => Team::Player,
+            Team::Player => Team::Enemy,
+        };
+        if stats.ap == 0 {
+            queue.0.clear();
+            queue.0.push(Action::EndTurn(next));
+        }
     }
 }

@@ -13,7 +13,6 @@ use crate::{
     entities::{Interactable, Map},
     states::{AppState, GameplayStates},
     to_world,
-    ui::LogEvent,
 };
 
 pub mod actions;
@@ -25,6 +24,7 @@ pub fn plugin(app: &mut App) {
     app.register_type::<Stats>()
         .register_type::<Velocity>()
         .register_type::<CharacterClass>()
+        .register_type::<ActionQueue>()
         .insert_resource(Sampler(ChaCha8Rng::from_os_rng()))
         .insert_resource(PointerIsDirty(true))
         .insert_gizmo_config(
@@ -88,6 +88,9 @@ pub enum CharacterClass {
     Attacker,
 }
 
+#[derive(Component)]
+pub struct Ball;
+
 pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut commands: Commands) {
     commands.spawn((
         Name::from("Ball"),
@@ -101,6 +104,7 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
         },
         Transform::from_xyz(0.0, 0.0, 2.0),
         Interactable::Ball,
+        Ball,
     ));
 
     let positions = [
@@ -118,7 +122,7 @@ pub fn startup(mut sampler: ResMut<Sampler>, glyphs: Res<GlyphAsset>, mut comman
     ];
 
     for (index, position) in positions.iter().enumerate() {
-        let mut player = commands.spawn((
+        commands.spawn((
             Name::from(random_name(&mut sampler.0)),
             Sprite {
                 image: glyphs.glyph.clone_weak(),
