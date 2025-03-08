@@ -121,7 +121,9 @@ pub struct FontAsset {
 }
 
 impl FontAsset {
-    const PATH: &'static str = "PixelifySans-VariableFont_wght.ttf";
+    const PATH: &'static str = "FreePixel.ttf";
+    // const PATH: &'static str = "16bfZX.ttf";
+    // const PATH: &'static str = "PixelifySans-VariableFont_wght.ttf";
 }
 
 impl FromWorld for FontAsset {
