@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod loading;
 mod splashscreen;
 
 /// Adds all game relevant systems for different game states.
@@ -8,7 +9,7 @@ mod splashscreen;
 pub fn plugin(app: &mut App) {
     app.init_state::<AppStates>()
         .enable_state_scoped_entities::<AppStates>()
-        .add_plugins(splashscreen::plugin)
+        .add_plugins((splashscreen::plugin, loading::plugin))
         .add_systems(Startup, startup);
 }
 
@@ -16,6 +17,7 @@ pub fn plugin(app: &mut App) {
 enum AppStates {
     #[default]
     Splashscreen,
+    Loading,
     Title,
     Credits,
     Gameplay,

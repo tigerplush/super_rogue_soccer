@@ -13,6 +13,7 @@ pub use traits::*;
 
 pub fn plugin(app: &mut App) {
     app.register_type::<ImageNodeFadeInOut>()
+        .init_resource::<ResourceHandles>()
         .load_resource::<GlyphAsset>()
         .add_systems(PreUpdate, systems::load_resource_assets);
 }

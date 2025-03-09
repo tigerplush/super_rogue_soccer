@@ -18,7 +18,7 @@ impl ImageNodeFadeInOut {
     }
 }
 
-const SPLASH_DURATION_SECS: f32 = 1.8;
+pub const SPLASH_DURATION_SECS: f32 = 1.8;
 const SPLASH_FADE_DURATION_SECS: f32 = 0.6;
 
 impl Default for ImageNodeFadeInOut {
