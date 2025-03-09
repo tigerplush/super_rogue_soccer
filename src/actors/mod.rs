@@ -323,6 +323,7 @@ fn preview_pass(
 #[reflect(Component)]
 pub struct Stats {
     ap: usize,
+    intial_ap: usize,
     kick_strength: f32,
     passing_skill: f32,
     wit: f32,
@@ -332,7 +333,7 @@ pub struct Stats {
 
 impl Stats {
     fn from_class(class: &CharacterClass, position: usize, sampler: &mut ChaCha8Rng) -> Self {
-        let (ap, kick_strength, passing_skill) = (8, 15.0, 50.0);
+        let (ap, kick_strength, passing_skill) = (10, 15.0, 50.0);
         let weights = match class {
             CharacterClass::Goalkeeper => [0.5, 1.0, 1.5, 1.0, 2.0],
             CharacterClass::CentralDefender => [1.0, 1.0, 1.5, 0.5, 2.0],
@@ -349,7 +350,8 @@ impl Stats {
         normalized = normalized.map(|element| element / sum);
 
         Stats {
-            ap: ap + (normalized[0] * 4.0) as usize,
+            ap: ap + (normalized[0] * 6.0) as usize,
+            intial_ap: ap + (normalized[0] * 6.0) as usize,
             kick_strength: kick_strength + normalized[1] * 10.0,
             passing_skill: passing_skill + normalized[2] * 30.0,
             wit: normalized[3],
@@ -359,7 +361,7 @@ impl Stats {
     }
 
     pub fn reset_ap(&mut self) {
-        self.ap = 10;
+        self.ap += self.intial_ap;
     }
 }
 
