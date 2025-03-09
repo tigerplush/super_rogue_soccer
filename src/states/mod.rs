@@ -1,39 +1,26 @@
 use bevy::prelude::*;
 
-use crate::actors::Team;
+mod splashscreen;
 
-pub mod gameplay;
-mod loading;
-mod splash;
+/// Adds all game relevant systems for different game states.
+/// Each state is self-contained and should not export anything else.
+/// Each state should also only apply systems for itself.
+pub fn plugin(app: &mut App) {
+    app.init_state::<AppStates>()
+        .enable_state_scoped_entities::<AppStates>()
+        .add_plugins(splashscreen::plugin)
+        .add_systems(Startup, startup);
+}
 
-#[derive(States, Debug, Hash, PartialEq, Eq, Clone, Default)]
-pub enum AppState {
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, States)]
+enum AppStates {
     #[default]
-    Splash,
-    Loading,
+    Splashscreen,
     Title,
     Credits,
     Gameplay,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, SubStates)]
-#[source(AppState = AppState::Gameplay)]
-pub enum GameplayStates {
-    PlayerTurn,
-    EnemyTurn,
-    Banner(Team),
-}
-
-impl Default for GameplayStates {
-    fn default() -> Self {
-        GameplayStates::Banner(Team::Player)
-    }
-}
-
-pub fn plugin(app: &mut App) {
-    app.init_state::<AppState>()
-        .add_sub_state::<GameplayStates>();
-
-    app.enable_state_scoped_entities::<AppState>();
-    app.add_plugins((splash::plugin, loading::plugin, gameplay::plugin));
+fn startup(mut commands: Commands) {
+    commands.spawn((Camera2d, Transform::from_xyz(172.0, -55.0, 0.0)));
 }
