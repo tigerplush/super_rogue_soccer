@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_old_tv_shader::OldTvSettings;
 
 mod loading;
 mod splashscreen;
@@ -24,5 +25,15 @@ enum AppStates {
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn((Camera2d, Transform::from_xyz(172.0, -55.0, 0.0)));
+    commands.spawn((
+        Camera2d,
+        Transform::from_xyz(172.0, -55.0, 0.0),
+        OldTvSettings {
+            screen_shape_factor: 0.1,
+            rows: 720.0,
+            brightness: 3.0,
+            edges_transition_size: 0.025,
+            channels_mask_min: 0.1,
+        },
+    ));
 }
