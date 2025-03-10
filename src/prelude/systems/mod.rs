@@ -2,6 +2,9 @@ use bevy::prelude::*;
 
 use super::ResourceHandles;
 
+pub mod actors;
+pub mod map;
+
 pub fn load_resource_assets(world: &mut World) {
     world.resource_scope(|world, mut resource_handles: Mut<ResourceHandles>| {
         world.resource_scope(|world, assets: Mut<AssetServer>| {

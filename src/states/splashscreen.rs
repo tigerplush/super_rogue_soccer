@@ -28,6 +28,10 @@ fn startup(asset_server: Res<AssetServer>, mut commands: Commands) {
         ))
         .with_child((
             Name::new("Splash Image"),
+            Node {
+                width: Val::Percent(100.0),
+                ..default()
+            },
             ImageNode {
                 image: asset_server.load_with_settings(
                     SPLASH_SCREEN_IMAGE_FILE_PATH,

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy_old_tv_shader::OldTvSettings;
 
+mod gameplay;
 mod loading;
 mod splashscreen;
 
@@ -10,7 +11,7 @@ mod splashscreen;
 pub fn plugin(app: &mut App) {
     app.init_state::<AppStates>()
         .enable_state_scoped_entities::<AppStates>()
-        .add_plugins((splashscreen::plugin, loading::plugin))
+        .add_plugins((splashscreen::plugin, loading::plugin, gameplay::plugin))
         .add_systems(Startup, startup);
 }
 
