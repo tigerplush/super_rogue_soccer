@@ -1,4 +1,7 @@
-use bevy::{image::{ImageLoaderSettings, ImageSampler}, prelude::*};
+use bevy::{
+    image::{ImageLoaderSettings, ImageSampler},
+    prelude::*,
+};
 
 #[derive(Resource, Asset, TypePath, Clone)]
 pub struct PanelBorderAsset {

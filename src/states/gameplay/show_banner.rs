@@ -1,4 +1,8 @@
-use bevy::{color::palettes::css::{DARK_CYAN, GREEN, ORANGE}, prelude::*};
+use bevy::{
+    color::palettes::css::{DARK_CYAN, GREEN, ORANGE},
+    prelude::*,
+    ui::widget::NodeImageMode,
+};
 
 use crate::prelude::*;
 
@@ -7,10 +11,13 @@ use super::GameplayStates;
 pub fn plugin(app: &mut App) {
     app.add_systems(
         OnEnter(GameplayStates::ShowBanner),
-        (designate_current_player, paint_character.after(designate_current_player))
+        (
+            designate_current_player,
+            (show_banner, paint_character).after(designate_current_player),
+        ),
     )
-    .add_systems(Update, dummy.run_if(in_state(GameplayStates::ShowBanner)))
-    .add_systems(OnExit(GameplayStates::ShowBanner), dummy);
+    .add_systems(Update, check_node.run_if(in_state(GameplayStates::ShowBanner)))
+    .add_systems(OnExit(GameplayStates::ShowBanner), clean_up);
 }
 
 #[derive(Component, Reflect)]
@@ -59,4 +66,76 @@ fn paint_character(mut query: Query<(&mut Sprite, &Teams, Option<&CurrentPlayer>
     }
 }
 
-fn dummy() {}
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct Banner;
+
+fn show_banner(
+    font_asset: Res<FontAsset>,
+    panel_border: Res<PanelBorderAsset>,
+    query: Single<(&Name, &Teams), With<CurrentPlayer>>,
+    mut commands: Commands,
+) {
+    commands
+        .ui_root()
+        .insert((ZIndex(1), Banner))
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(20.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                ImageNode {
+                    image: panel_border.image.clone_weak(),
+                    image_mode: NodeImageMode::Sliced(panel_border.slicer.clone()),
+                    ..default()
+                },
+                ImageNodeFadeInOut::default().faded_in()
+            ))
+            .with_children(|banner| {
+                let (name, team) = query.into_inner();
+                let designation = match team {
+                    Teams::Player => "PLAYERS",
+                    Teams::Enemy => "ENEMIES",
+                };
+                banner.spawn((
+                    Text::new(format!("{} TURN", designation)),
+                    TextFont {
+                        font: font_asset.clone_weak(),
+                        font_size: 50.0,
+                        ..default()
+                    },
+                    ImageNodeFadeInOut::default().faded_in()
+                ));
+                banner.spawn((
+                    Text::new(format!("CURRENT PLAYER: {}", name)),
+                    TextFont {
+                        font: font_asset.clone_weak(),
+                        ..default()
+                    },
+                    ImageNodeFadeInOut::default().faded_in()
+                ));
+            });
+        });
+}
+
+fn check_node(current_team: Res<CurrentTeam>, mut next: ResMut<NextState<GameplayStates>>, query: Query<&ImageNodeFadeInOut>) {
+    if query.iter().all(|element| element.elapsed()) {
+        let next_state = match current_team.0 {
+            Teams::Player => GameplayStates::PlayerTurn,
+            Teams::Enemy => GameplayStates::EnemyTurn,
+        };
+        next.set(next_state);
+    }
+}
+
+fn clean_up(query: Query<Entity, With<Banner>>, mut commands: Commands) {
+    for entity in &query {
+        commands.entity(entity).despawn_recursive();
+    }
+}

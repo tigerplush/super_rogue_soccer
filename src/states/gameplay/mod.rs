@@ -1,9 +1,13 @@
-use bevy::{color::palettes::css::YELLOW, prelude::*, ui::widget::NodeImageMode};
+use bevy::{
+    color::palettes::css::{DARK_GRAY, WHITE, YELLOW},
+    prelude::*,
+    ui::widget::NodeImageMode,
+};
 use leafwing_input_manager::prelude::*;
 
 use crate::prelude::*;
 
-use super::AppStates;
+use super::*;
 
 mod enemy_turn;
 mod player_turn;
@@ -12,6 +16,11 @@ mod show_banner;
 
 pub fn plugin(app: &mut App) {
     app.add_sub_state::<GameplayStates>()
+        .register_type::<DisplayActions>()
+        .register_type::<PointerLocation>()
+        .insert_resource(DisplayActions(Vec::new()))
+        .insert_resource(PointerLocation::new())
+        .insert_resource(CurrentTeam(Teams::Player))
         .add_plugins((
             enemy_turn::plugin,
             player_turn::plugin,
@@ -19,10 +28,26 @@ pub fn plugin(app: &mut App) {
             show_banner::plugin,
         ))
         .add_plugins(InputManagerPlugin::<PointerActions>::default())
-        .add_systems(OnEnter(AppStates::Gameplay), (spawn_pointer_controls, spawn_ui))
+        .add_systems(
+            OnEnter(AppStates::Gameplay),
+            (spawn_pointer_controls, spawn_ui),
+        )
+        .add_systems(PreUpdate, update_map.run_if(in_state(AppStates::Gameplay)))
         .add_systems(
             Update,
-            (tick_pointer, move_pointer).run_if(in_state(AppStates::Gameplay)),
+            (
+                tick_pointer.in_set(AppSet::TickTimers),
+                move_pointer.in_set(AppSet::UpdateMovement),
+            )
+                .run_if(in_state(AppStates::Gameplay)),
+        )
+        .add_systems(
+            PostUpdate,
+            (update_ui.run_if(pointer_is_dirty)).run_if(in_state(AppStates::Gameplay)),
+        )
+        .add_systems(
+            Last,
+            (reset_pointer_location).run_if(in_state(AppStates::Gameplay)),
         )
         .add_systems(OnExit(AppStates::Gameplay), clean_up);
 }
@@ -37,10 +62,82 @@ enum GameplayStates {
     EnemyTurn,
 }
 
+#[derive(Debug, Resource, Reflect)]
+#[reflect(Resource)]
+struct PointerLocation {
+    old: IVec2,
+    new: IVec2,
+}
+
+impl PointerLocation {
+    fn new() -> Self {
+        PointerLocation {
+            old: IVec2::NEG_ONE,
+            new: IVec2::ZERO,
+        }
+    }
+}
+
+fn pointer_is_dirty(pointer_location: Res<PointerLocation>) -> bool {
+    pointer_location.new != pointer_location.old
+}
+
 #[derive(Actionlike, Reflect, Clone, Hash, Eq, PartialEq, Debug)]
 enum PointerActions {
     #[actionlike(DualAxis)]
     Move,
+}
+#[derive(Component)]
+pub struct InfoContainer;
+
+#[derive(Component)]
+pub struct Log;
+
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+pub struct DisplayActions(Vec<DisplayAction>);
+
+type Action = (KeyCode, PlayerCommand, bool);
+
+#[derive(Reflect)]
+enum PlayerCommand {
+    Walk,
+    TakeControl,
+    Pass,
+    Kick,
+    Foul,
+    Skip,
+}
+
+impl ToString for PlayerCommand {
+    fn to_string(&self) -> String {
+        match self {
+            &PlayerCommand::Walk => "walk",
+            &PlayerCommand::TakeControl => "take control",
+            &PlayerCommand::Pass => "pass",
+            &PlayerCommand::Kick => "kick",
+            &PlayerCommand::Foul => "foul",
+            &PlayerCommand::Skip => "SKIP",
+        }
+        .to_string()
+    }
+}
+
+const POSSIBLE_KEYS: [KeyCode; 8] = [
+    KeyCode::KeyF,
+    KeyCode::KeyG,
+    KeyCode::KeyH,
+    KeyCode::KeyJ,
+    KeyCode::KeyK,
+    KeyCode::KeyL,
+    KeyCode::KeyV,
+    KeyCode::KeyB,
+];
+
+#[derive(Reflect)]
+enum DisplayAction {
+    SingleAction(Action),
+    EntityAction(Entity, Vec<Action>),
 }
 
 fn spawn_pointer_controls(glyphs: Res<GlyphAsset>, mut commands: Commands) {
@@ -71,13 +168,6 @@ fn spawn_pointer_controls(glyphs: Res<GlyphAsset>, mut commands: Commands) {
             ));
         });
 }
-
-
-#[derive(Component)]
-pub struct InfoContainer;
-
-#[derive(Component)]
-pub struct Log;
 
 fn spawn_ui(panel_border: Res<PanelBorderAsset>, mut commands: Commands) {
     commands.ui_root().with_children(|root| {
@@ -133,18 +223,65 @@ fn spawn_ui(panel_border: Res<PanelBorderAsset>, mut commands: Commands) {
     });
 }
 
+fn update_map(
+    mut positions: ResMut<EntityPositions>,
+    query: Query<(Entity, &Interactables, &Transform)>,
+) {
+    positions.0.clear();
+    for (entity, interactable, transform) in &query {
+        let position = transform.as_ivec2();
+        positions
+            .0
+            .entry(position)
+            .and_modify(|e| e.push((entity, interactable.clone())))
+            .or_insert(vec![(entity, interactable.clone())]);
+    }
+}
+
 fn tick_pointer(time: Res<Time>, mut query: Query<&mut PointerObject>) {
     for mut pointer in &mut query {
         pointer.0.tick(time.delta());
     }
 }
 
-fn move_pointer(pointer: Single<(&ActionState<PointerActions>, &mut Transform, &PointerObject)>) {
+fn move_pointer(
+    mut pointer_location: ResMut<PointerLocation>,
+    pointer: Single<(&ActionState<PointerActions>, &mut Transform, &PointerObject)>,
+) {
     let (action_state, mut transform, pointer) = pointer.into_inner();
     if pointer.0.finished() && action_state.axis_pair(&PointerActions::Move) != Vec2::ZERO {
         let input = action_state.axis_pair(&PointerActions::Move);
         transform.translation += (input * 8.0).extend(0.0);
     }
+    pointer_location.new = transform.as_ivec2();
+}
+
+fn update_ui(
+    possible_action: Res<DisplayActions>,
+    container: Single<Entity, With<InfoContainer>>,
+    mut commands: Commands,
+) {
+    let entity = container.into_inner();
+    commands.entity(entity).despawn_descendants();
+    for display_action in &possible_action.0 {
+        match display_action {
+            DisplayAction::SingleAction((key, action, available)) => {
+                let color = if *available { WHITE } else { DARK_GRAY };
+                commands.entity(entity).with_child((
+                    Text::new(format!("{:?} - {}", key, action.to_string())),
+                    TextColor(color.into()),
+                ));
+            }
+            DisplayAction::EntityAction(entity, items) => todo!(),
+        }
+    }
+}
+fn reset_pointer_location(
+    mut pointer_location: ResMut<PointerLocation>,
+    pointer: Single<&Transform, With<PointerObject>>,
+) {
+    let transform = pointer.into_inner();
+    pointer_location.old = transform.as_ivec2();
 }
 
 fn clean_up() {}

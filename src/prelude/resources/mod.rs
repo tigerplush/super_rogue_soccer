@@ -1,16 +1,20 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
+mod font_asset;
 mod glyph_asset;
 mod panel_border_asset;
 mod resource_handles;
 
+pub use font_asset::FontAsset;
 pub use glyph_asset::GlyphAsset;
 pub use panel_border_asset::PanelBorderAsset;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 pub use resource_handles::ResourceHandles;
 
-use super::{CharacterClasses, FIRST_NAMES, LAST_NAMES, Stats, Teams};
+use super::{CharacterClasses, FIRST_NAMES, Interactables, LAST_NAMES, Stats, Teams};
 
 #[derive(Resource)]
 pub struct Names {
@@ -70,5 +74,15 @@ impl CurrentTeam {
             Teams::Player => Teams::Enemy,
             Teams::Enemy => Teams::Player,
         }
+    }
+}
+
+#[derive(Resource, Reflect)]
+#[reflect(Resource)]
+pub struct EntityPositions(pub HashMap<IVec2, Vec<(Entity, Interactables)>>);
+
+impl EntityPositions {
+    pub fn new() -> Self {
+        EntityPositions(HashMap::new())
     }
 }

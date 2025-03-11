@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-#[derive(Component, Reflect)]
+#[derive(Clone, Component, Reflect)]
 #[reflect(Component)]
 pub enum Interactables {
     Wall,
@@ -9,7 +9,7 @@ pub enum Interactables {
     Person,
 }
 
-#[derive(Component, PartialEq, Reflect)]
+#[derive(Clone, Component, PartialEq, Reflect)]
 #[reflect(Component)]
 pub enum Teams {
     Enemy,
@@ -58,12 +58,28 @@ impl Stats {
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-pub struct ActionQueue;
+pub struct ActionQueue(pub Vec<PlayerAction>);
 
 impl Default for ActionQueue {
     fn default() -> Self {
-        ActionQueue
+        ActionQueue(Vec::new())
     }
+}
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub enum PlayerAction {
+    MoveTo(Vec3),
+    Kick(Entity),
+    TakeControl(Entity),
+    Foul(Entity),
+    /// Which entity has to be passed where
+    Pass(Entity, Vec3),
+    DefendGoal,
+    SkipTurn,
+    EndTurn(Teams),
+    Advance,
+    PassDown,
 }
 
 #[derive(Component, Reflect)]
