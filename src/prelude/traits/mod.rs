@@ -10,12 +10,14 @@ pub use containers::Containers;
 pub use load_resource::LoadResource;
 pub use widgets::*;
 
+use super::TILE_SIZE;
+
 pub trait ToIvec2 {
     fn as_ivec2(&self) -> IVec2;
 }
 
 impl ToIvec2 for Transform {
     fn as_ivec2(&self) -> IVec2 {
-        (self.translation.truncate() / 8.0).round().as_ivec2()
+        (self.translation.truncate() / TILE_SIZE).round().as_ivec2()
     }
 }

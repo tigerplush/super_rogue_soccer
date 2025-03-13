@@ -56,6 +56,20 @@ impl Stats {
     }
 }
 
+impl std::fmt::Display for Stats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "AP: {} | KICK STRENGTH: {:.0}\nPASSING SKILL: {:.0} | WIT {:.2}%\nDEFENSE: {:.2}%",
+            self.ap,
+            self.kick_strength,
+            self.passing_skill,
+            self.wit * 100.0,
+            self.defense * 100.0
+        )
+    }
+}
+
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct ActionQueue(pub Vec<PlayerAction>);

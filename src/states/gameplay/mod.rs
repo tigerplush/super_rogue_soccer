@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::{
     color::palettes::css::{DARK_GRAY, WHITE, YELLOW},
     prelude::*,
@@ -109,6 +111,19 @@ enum PlayerCommand {
     Skip,
 }
 
+impl PlayerCommand {
+    fn cost(&self) -> usize {
+        match self {
+            &PlayerCommand::Walk => 0,
+            &PlayerCommand::TakeControl => 2,
+            &PlayerCommand::Pass => 2,
+            &PlayerCommand::Kick => 2,
+            &PlayerCommand::Foul => 2,
+            &PlayerCommand::Skip => 0,
+        }
+    }
+}
+
 impl ToString for PlayerCommand {
     fn to_string(&self) -> String {
         match self {
@@ -123,21 +138,11 @@ impl ToString for PlayerCommand {
     }
 }
 
-const POSSIBLE_KEYS: [KeyCode; 8] = [
-    KeyCode::KeyF,
-    KeyCode::KeyG,
-    KeyCode::KeyH,
-    KeyCode::KeyJ,
-    KeyCode::KeyK,
-    KeyCode::KeyL,
-    KeyCode::KeyV,
-    KeyCode::KeyB,
-];
-
 #[derive(Reflect)]
 enum DisplayAction {
     SingleAction(Action),
     EntityAction(Entity, Vec<Action>),
+    StatBlock(Entity),
 }
 
 fn spawn_pointer_controls(glyphs: Res<GlyphAsset>, mut commands: Commands) {
@@ -259,8 +264,21 @@ fn move_pointer(
 fn update_ui(
     possible_action: Res<DisplayActions>,
     container: Single<Entity, With<InfoContainer>>,
+    names: Query<&Name>,
+    stats: Query<&Stats>,
     mut commands: Commands,
 ) {
+    let key_names: HashMap<KeyCode, &str> = HashMap::from([
+        (KeyCode::KeyF, "f"),
+        (KeyCode::KeyG, "g"),
+        (KeyCode::KeyH, "h"),
+        (KeyCode::KeyJ, "j"),
+        (KeyCode::KeyK, "k"),
+        (KeyCode::KeyL, "l"),
+        (KeyCode::KeyV, "v"),
+        (KeyCode::KeyB, "b"),
+        (KeyCode::Space, "space"),
+    ]);
     let entity = container.into_inner();
     commands.entity(entity).despawn_descendants();
     for display_action in &possible_action.0 {
@@ -268,11 +286,39 @@ fn update_ui(
             DisplayAction::SingleAction((key, action, available)) => {
                 let color = if *available { WHITE } else { DARK_GRAY };
                 commands.entity(entity).with_child((
-                    Text::new(format!("{:?} - {}", key, action.to_string())),
+                    Text::new(format!(
+                        "{} - {}",
+                        key_names.get(key).unwrap(),
+                        action.to_string()
+                    )),
                     TextColor(color.into()),
                 ));
             }
-            DisplayAction::EntityAction(entity, items) => todo!(),
+            DisplayAction::StatBlock(target) => {
+                let name = names.get(*target).unwrap();
+                let stat = stats.get(*target).unwrap();
+                commands.entity(entity).with_children(|parent| {
+                    parent.spawn(Text::new(format!("{}", name)));
+                    parent.spawn(Text::new(format!("{}", stat)));
+                });
+            }
+            DisplayAction::EntityAction(target, items) => {
+                let name = names.get(*target).unwrap();
+                commands.entity(entity).with_children(|parent| {
+                    parent.spawn(Text::new(format!("{}", name)));
+                    for (key, action, available) in items {
+                        let color = if *available { WHITE } else { DARK_GRAY };
+                        parent.spawn((
+                            Text::new(format!(
+                                "{} - {}",
+                                key_names.get(key).unwrap(),
+                                action.to_string()
+                            )),
+                            TextColor(color.into()),
+                        ));
+                    }
+                });
+            }
         }
     }
 }

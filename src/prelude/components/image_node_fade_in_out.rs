@@ -51,7 +51,13 @@ pub fn tick_image_node_fades(time: Res<Time>, mut query: Query<&mut ImageNodeFad
     }
 }
 
-pub fn apply_image_node_fades(mut query: Query<(&ImageNodeFadeInOut, Option<&mut ImageNode>, Option<&mut TextColor>)>) {
+pub fn apply_image_node_fades(
+    mut query: Query<(
+        &ImageNodeFadeInOut,
+        Option<&mut ImageNode>,
+        Option<&mut TextColor>,
+    )>,
+) {
     for (image_node_fade, image_node_option, text_color_option) in &mut query {
         if let Some(mut image_node) = image_node_option {
             image_node.color.set_alpha(image_node_fade.alpha());

@@ -16,7 +16,10 @@ pub fn plugin(app: &mut App) {
             (show_banner, paint_character).after(designate_current_player),
         ),
     )
-    .add_systems(Update, check_node.run_if(in_state(GameplayStates::ShowBanner)))
+    .add_systems(
+        Update,
+        check_node.run_if(in_state(GameplayStates::ShowBanner)),
+    )
     .add_systems(OnExit(GameplayStates::ShowBanner), clean_up);
 }
 
@@ -95,7 +98,7 @@ fn show_banner(
                     image_mode: NodeImageMode::Sliced(panel_border.slicer.clone()),
                     ..default()
                 },
-                ImageNodeFadeInOut::default().faded_in()
+                ImageNodeFadeInOut::default().faded_in(),
             ))
             .with_children(|banner| {
                 let (name, team) = query.into_inner();
@@ -110,7 +113,7 @@ fn show_banner(
                         font_size: 50.0,
                         ..default()
                     },
-                    ImageNodeFadeInOut::default().faded_in()
+                    ImageNodeFadeInOut::default().faded_in(),
                 ));
                 banner.spawn((
                     Text::new(format!("CURRENT PLAYER: {}", name)),
@@ -118,13 +121,17 @@ fn show_banner(
                         font: font_asset.clone_weak(),
                         ..default()
                     },
-                    ImageNodeFadeInOut::default().faded_in()
+                    ImageNodeFadeInOut::default().faded_in(),
                 ));
             });
         });
 }
 
-fn check_node(current_team: Res<CurrentTeam>, mut next: ResMut<NextState<GameplayStates>>, query: Query<&ImageNodeFadeInOut>) {
+fn check_node(
+    current_team: Res<CurrentTeam>,
+    mut next: ResMut<NextState<GameplayStates>>,
+    query: Query<&ImageNodeFadeInOut>,
+) {
     if query.iter().all(|element| element.elapsed()) {
         let next_state = match current_team.0 {
             Teams::Player => GameplayStates::PlayerTurn,
